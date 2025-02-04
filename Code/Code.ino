@@ -223,7 +223,7 @@ void loop() {
     // Обновляем главный экран только если не в меню
     if (currentMenu == MAIN_MENU) {
       checkSchedule(now);
-      updateDisplay(now, temp);
+      drawMainMenu();
     }
 
     // Проверяем состояние GPIO 5
@@ -322,6 +322,7 @@ void displayTemperature(float temp) {
 
 // ====================== Меню ====================== //
 void updateMenu() {
+  
   switch (currentMenu) {
     case MAIN_MENU:
       drawMainMenu();
@@ -375,32 +376,25 @@ void drawMainMenu() {
   oled.clear();
   oled.setFont(ArialRus_Plain_10);
 
-  // Заголовок
+  // Строка 1: Заголовок
   oled.drawString(LEFT_PADDING, TOP_PADDING, "Главное меню");
 
-  // Время
+  // Строка 2: Время и дата
   DateTime now = rtc.now();
-  char timeStr[9];
-  sprintf(timeStr, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+  char timeStr[30];
+  sprintf(timeStr, "%s  %02d:%02d:%02d", daysOfWeek[(now.dayOfTheWeek() + 6) % 7], now.hour(), now.minute(), now.second());
   oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, timeStr);
 
-  // Температура
+  // Строка 3: Температура
   float temp = sensors.getTempCByIndex(0);
   char tempStr[10];
   sprintf(tempStr, "%+.1fC", temp);
   oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, tempStr);
 
-  // Состояние GPIO
-  oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, gpioState ? "АКТИВЕН" : "ОЖИДАНИЕ");
-
-  // Статус перегрева (новая строка)
-  String overheatText = overheatStatus ? "ПЕРЕГРЕВ!" : "Штатное";
-  oled.drawString(LEFT_PADDING, TOP_PADDING + 4 * LINE_HEIGHT, "Состояние: " + overheatText);
-
-  // Статус Wi-Fi
-  if (WiFi.status() != WL_CONNECTED) {
-    oled.drawString(LEFT_PADDING, TOP_PADDING + 5 * LINE_HEIGHT, "WiFi ВЫКЛЮЧЕН");
-  }
+  // Строка 4: Состояние (GPIO + перегрев)
+  String stateLine = gpioState ? "В РАБОТЕ" : "ОЖИДАНИЕ";
+  stateLine += overheatStatus ? " / ПЕРЕГРЕВ!" : " / Штатное";
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, stateLine);
 
   oled.display();
 }
@@ -925,11 +919,11 @@ void saveAndExit() {
   oled.setFont(ArialRus_Plain_10);
   oled.drawString(0, 0, "Настройки сохранены!");
   oled.display();
-  delay(2000); // Показываем сообщение 2 секунды
+  delay(2000); 
   currentMenu = MAIN_MENU;
-  updateMenu(); // Возвращаемся в главное меню
+  // Убираем вызов updateMenu(), чтобы избежать двойной перерисовки
+  drawMainMenu(); // Принудительно рисуем главный экран
 }
-
 void handleRoot() {
   String html = "<html><body><h1>Управление розеткой</h1>";
   html += "<form action='/set' method='POST'>";
