@@ -47,6 +47,21 @@ unsigned long lastEncoderChange = 0; // Время последнего изме
 int encoderSpeed = 1;                // Текущий шаг изменения времени (в минутах)
 const int maxSpeed = 20;             // Максимальный шаг изменения времени (20 минут)
 
+// Переменные для Wi-Fi Menu
+
+struct WiFiNetwork {
+  String ssid;
+  int32_t rssi;
+  bool secured;
+};
+
+WiFiNetwork wifiNetworks[15];
+int wifiNetworkCount = 0;
+int selectedNetwork = 0;
+String wifiPassword;
+int selectedCharIndex = 0;
+const char passwordChars[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}|;:,.<>?/`~ ";
+
 // Переменные для настройки времени RTC
 int tempYear = 0;
 int tempMonth = 0;
@@ -98,6 +113,9 @@ enum MenuState {
   SCHEDULE_END_SELECT,   // Настройка времени окончания
   TEMP_SETUP,         // Настройка температуры
   WIFI_SETUP,         // Настройка Wi-Fi
+  WIFI_SCAN,
+  WIFI_LIST,
+  WIFI_PASSWORD_INPUT,
   SAVE_EXIT           // Сохранение и выход
 };
 
@@ -124,7 +142,7 @@ long oldEncoderPos = 0;
 
 // Прототипы функций
 void loadSchedule();
-void connectToWiFi();
+void connectToWiFi(const char* ssid, const char* password);
 void handleRoot();
 void handleSetSchedule();
 void checkSchedule(DateTime now);
@@ -166,6 +184,18 @@ void setup() {
   oled.setFont(ArialRus_Plain_10);
   oled.setFontTableLookupFunction(FontUtf8Rus);
 
+  preferences.begin("wifi", true);
+  String savedSSID = preferences.getString("wifi_ssid", "");
+  String savedPass = preferences.getString("wifi_pass", "");
+  preferences.end();
+
+  if (savedSSID != "") {
+    connectToWiFi(savedSSID.c_str(), savedPass.c_str());
+  } else {
+  // Используйте свои значения по умолчанию
+  connectToWiFi("SSID", "Password"); 
+  }
+
   // Инициализация RTC
   if (!rtc.begin()) {
     showDisplayError("Ошибка модуля RTC!");
@@ -182,9 +212,6 @@ void setup() {
   // Загрузка расписания
   preferences.begin("schedule", false);
   loadSchedule();
-
-  // Подключение к WiFi
-  connectToWiFi();
 
   // Синхронизация времени
   if(WiFi.status() == WL_CONNECTED) {
@@ -211,6 +238,7 @@ void loop() {
   DateTime now = rtc.now();
 
   static unsigned long lastUpdate = 0;
+
   if (millis() - lastUpdate >= 1000) {
     lastUpdate = millis();
 
@@ -234,6 +262,21 @@ void loop() {
       // Если GPIO 5 не активен, отображаем ближайшее время включения
       uint32_t nextStartTime = getNextStartTime(now);
       displayTime(nextStartTime);
+    }
+  }
+
+  if(currentMenu == WIFI_SCAN) {
+    int scanStatus = WiFi.scanComplete();
+    if(scanStatus >= 0) {
+      wifiNetworkCount = min(scanStatus, 15);
+      for(int i=0; i<wifiNetworkCount; i++) {
+        wifiNetworks[i].ssid = WiFi.SSID(i);
+        wifiNetworks[i].rssi = WiFi.RSSI(i);
+        wifiNetworks[i].secured = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+      }
+      currentMenu = WIFI_LIST;
+      selectedNetwork = 0;
+      updateMenu();
     }
   }
 
@@ -554,23 +597,61 @@ void drawWiFiSetup() {
   oled.clear();
   oled.setFont(ArialRus_Plain_10);
 
-  // Заголовок
-  oled.drawString(LEFT_PADDING, TOP_PADDING, "Wi-Fi настройки:");
+  switch(currentMenu) {
+    case WIFI_SCAN:
+      oled.drawString(LEFT_PADDING, TOP_PADDING, "Сканирование Wi-Fi...");
+      break;
 
-  // Статус Wi-Fi
-  if (WiFi.status() == WL_CONNECTED) {
-    oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "Подключен");
-    oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, "IP: " + WiFi.localIP().toString());
-  } else {
-    oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "Отключен");
+    case WIFI_LIST: {
+      oled.drawString(LEFT_PADDING, TOP_PADDING, "Выберите сеть:");
+      int startIdx = max(0, selectedNetwork - 2);
+      int endIdx = min(wifiNetworkCount, startIdx + 4);
+
+      for(int i = startIdx; i < endIdx; i++) {
+        String line;
+        if(i == selectedNetwork) line = "> "; // Подсветка выбранной сети
+        line += wifiNetworks[i].ssid.substring(0, 15);
+        line += " ";
+        line += wifiNetworks[i].secured ? "🔒" : " ";
+        line += String(" (") + wifiNetworks[i].rssi + "dBm)";
+
+        oled.drawString(LEFT_PADDING, TOP_PADDING + (i - startIdx + 1)*LINE_HEIGHT, line);
+      }
+      break;
+    }
+
+    case WIFI_PASSWORD_INPUT: {
+      oled.drawString(LEFT_PADDING, TOP_PADDING, "Пароль для:");
+      oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, wifiNetworks[selectedNetwork].ssid);
+
+      // Отображаем пароль без маскировки
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, wifiPassword);
+
+      // Отображаем текущий выбранный символ
+      String charLine = "[";
+      charLine += passwordChars[selectedCharIndex];
+      charLine += "]";
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, charLine);
+
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 5*LINE_HEIGHT, "Коротко: добавить символ");
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 6*LINE_HEIGHT, "Долго: сохранить пароль");
+      break;
+    }
+
+    default:
+      // Старая реализация
+      if (WiFi.status() == WL_CONNECTED) {
+        oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "Подключен");
+        oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, "IP: " + WiFi.localIP().toString());
+      } else {
+        oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "Отключен");
+      }
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 4*LINE_HEIGHT, "OK - Сканировать");
+      break;
   }
-
-  // Подсказка
-  oled.drawString(LEFT_PADDING, TOP_PADDING + 4 * LINE_HEIGHT, "OK       Отмена");
 
   oled.display();
 }
-
 void drawSaveExit() {
   oled.clear();
   oled.setFont(ArialRus_Plain_10);
@@ -658,6 +739,20 @@ void handleEncoder() {
 
         case SCHEDULE_END_SELECT:
           tempEndTime = (tempEndTime + delta * encoderSpeed * 60) % 86400;
+          break;
+
+        case WIFI_LIST:
+          if(newPos != oldPos) {
+            selectedNetwork = constrain(selectedNetwork + delta, 0, wifiNetworkCount-1);
+            updateMenu();
+          }
+          break;
+
+        case WIFI_PASSWORD_INPUT:
+          if(newPos != oldPos) {
+            selectedCharIndex = (selectedCharIndex + delta + strlen(passwordChars)) % strlen(passwordChars);
+            updateMenu();
+          }
           break;
 
         default:
@@ -803,12 +898,30 @@ void handleShortPress() {
       break;
 
     case WIFI_SETUP:
-      // Переподключение к WiFi
-      WiFi.disconnect();
-      connectToWiFi();
-      showSaveMessage(); // Показываем сообщение о сохранении
-      currentMenu = MAIN_MENU;
-      updateMenu();
+      // Начать сканирование сетей
+      WiFi.scanDelete();
+      WiFi.scanNetworks(true);
+      currentMenu = WIFI_SCAN; // Переход в состояние сканирования
+      updateMenu(); // Обновляем экран
+      break;
+
+    case WIFI_LIST:
+      // Выбрать сеть
+      if(wifiNetworks[selectedNetwork].secured) {
+        wifiPassword = "";
+        selectedCharIndex = 0;
+        currentMenu = WIFI_PASSWORD_INPUT;
+      } else {
+        // Подключиться без пароля
+        connectToWiFi(wifiNetworks[selectedNetwork].ssid.c_str(), "");
+      }
+      updateMenu(); // Обновляем экран
+      break;
+
+    case WIFI_PASSWORD_INPUT:
+      // Добавить выбранный символ
+      wifiPassword += passwordChars[selectedCharIndex];
+      updateMenu(); // Обновляем экран
       break;
 
     case SAVE_EXIT:
@@ -830,8 +943,19 @@ void handleLongPress() {
     rtc.adjust(DateTime(tempYear, tempMonth, tempDay, tempHour, tempMinute, tempSecond));
     showSaveMessage();
     currentMenu = MAIN_MENU;
-    updateMenu();
+    drawMainMenu();
   }
+
+  if(currentMenu == WIFI_PASSWORD_INPUT) {
+    // Проверяем, что кнопка удерживалась более 3 секунд
+    unsigned long duration = millis() - lastButtonPress;
+    if (duration >= 3000) {
+      // Сохранить пароль и подключиться
+      preferences.putString("wifi_ssid", wifiNetworks[selectedNetwork].ssid);
+      preferences.putString("wifi_pass", wifiPassword);
+      connectToWiFi(wifiNetworks[selectedNetwork].ssid.c_str(), wifiPassword.c_str());
+      currentMenu = MAIN_MENU;
+    }
 }
 
 // ====================== Остальные функции ====================== //
@@ -902,14 +1026,23 @@ uint32_t parseTime(String timeStr) {
   return h*3600 + m*60;
 }
 
-void connectToWiFi() {
+void connectToWiFi(const char* ssid, const char* password) {
+  WiFi.disconnect();
   WiFi.begin(ssid, password);
+  
   unsigned long start = millis();
-  while(WiFi.status() != WL_CONNECTED && millis()-start < 10000) {
+  while(WiFi.status() != WL_CONNECTED && millis()-start < 15000) {
     delay(500);
     oled.clear();
-    oled.drawString(0, 0, "Подключаюсь к Wi-Fi...");
+    oled.drawString(0, 0, "Подключаемся к:");
+    oled.drawString(0, 12, ssid);
     oled.display();
+  }
+  
+  if(WiFi.status() == WL_CONNECTED) {
+    // Синхронизация времени
+    timeClient.update();
+    rtc.adjust(DateTime(timeClient.getEpochTime()));
   }
 }
 
