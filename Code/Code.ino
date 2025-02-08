@@ -13,50 +13,48 @@
 #include "fontsRus.h"
 
 // Конфигурация пинов
-#define TM1637_CLK 18
-#define TM1637_DIO 19
-#define TEMP_PIN 4
-#define GPIO_CONTROL 5
-#define ENCODER_CLK 23
-#define ENCODER_DT 25
-#define ENCODER_SW 26
-#define I2C_SDA 21
-#define I2C_SCL 22
-
-// scantime WiFi
-unsigned long lastScanTime = 0;
-const unsigned long SCAN_INTERVAL = 2000;
+#define TM1637_CLK 18     // Новый пин CLK для TM1637
+#define TM1637_DIO 19     // Новый пин DIO для TM1637
+#define TEMP_PIN 4        // DS18B20
+#define GPIO_CONTROL 5    // Реле
+#define ENCODER_CLK 23    // Энкодер CLK
+#define ENCODER_DT 25     // Энкодер DT
+#define ENCODER_SW 26     // Энкодер SW
+#define I2C_SDA 21        // OLED SDA
+#define I2C_SCL 22        // OLED SCL
 
 // Настройки шрифта
-const int LINE_HEIGHT = 12;
-const int TOP_PADDING = 5;
-const int LEFT_PADDING = 5;
+const int LINE_HEIGHT = 12;  // Высота строки
+const int TOP_PADDING = 5;   // Отступ сверху
+const int LEFT_PADDING = 5;  // Отступ слева
 
 // Переменные контроля температуры
-const float TEMP_HIGH_THRESHOLD = 75.0;
-const float TEMP_LOW_THRESHOLD = 50.0;
-bool tempProtectionActive = false;
-bool overheatStatus = false;
+const float TEMP_HIGH_THRESHOLD = 75.0; // Порог высокой температуры (75°C)
+const float TEMP_LOW_THRESHOLD = 50.0;  // Порог низкой температуры (50°C)
+bool tempProtectionActive = false;      // Флаг, указывающий, что защита от перегрева активна
+bool overheatStatus = false;            // Новая переменная: флаг перегрева
 
-// Дни недели
+// Отображение дня недели на главном экране
 const char* daysOfWeek[] = {"Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"};
 
-// Меню расписания
-int currentDay = 0;
-uint32_t tempStartTime = 0;
-uint32_t tempEndTime = 0;
+// Переменные меню Schedule setup
+int currentDay = 0; // Текущий выбранный день недели
+uint32_t tempStartTime = 0; // Временное значение для времени старта
+uint32_t tempEndTime = 0;   // Временное значение для времени окончания
 
-// Энкодер
-unsigned long lastEncoderChange = 0;
-int encoderSpeed = 1;
-const int maxSpeed = 20;
+// Фича ускорения энкодера
+unsigned long lastEncoderChange = 0; // Время последнего изменения позиции энкодера
+int encoderSpeed = 1;                // Текущий шаг изменения времени (в минутах)
+const int maxSpeed = 20;             // Максимальный шаг изменения времени (20 минут)
 
-// Wi-Fi
+// Переменные для Wi-Fi Menu
+
 struct WiFiNetwork {
   String ssid;
   int32_t rssi;
   bool secured;
 };
+
 WiFiNetwork wifiNetworks[15];
 int wifiNetworkCount = 0;
 int selectedNetwork = 0;
@@ -64,7 +62,7 @@ String wifiPassword;
 int selectedCharIndex = 0;
 const char passwordChars[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}|;:,.<>?/`~ ";
 
-// RTC
+// Переменные для настройки времени RTC
 int tempYear = 0;
 int tempMonth = 0;
 int tempDay = 0;
@@ -74,19 +72,21 @@ int tempSecond = 0;
 
 // Настройки WiFi
 const char* ssid = "Rolincero 2.4G";
-const char* password = "Password";
+const char* password = "*****************";
 
-// NTP
+// Настройки NTP
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 36000);
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 36000); // UTC+10
 
-// Устройства
+// Инициализация устройств I2C
 TM1637Display display(TM1637_CLK, TM1637_DIO);
 RTC_DS3231 rtc;
-SSD1306Wire oled(0x3C, I2C_SDA, I2C_SCL);
+SSD1306Wire oled(0x3C, I2C_SDA, I2C_SCL); // Дисплей на 0x3C
+
+// Остальные компоненты
 OneWire oneWire(TEMP_PIN);
 DallasTemperature sensors(&oneWire);
-ESP32Encoder encoder;
+ESP32Encoder encoder;  // Используем ESP32Encoder
 WebServer server(80);
 Preferences preferences;
 
@@ -98,30 +98,28 @@ struct Schedule {
 
 // Состояния меню
 enum MenuState {
-  MAIN_MENU,
-  MENU_NAVIGATION,
-  TIME_SETUP,
-  TIME_SETUP_YEAR,
-  TIME_SETUP_MONTH,
-  TIME_SETUP_DAY,
-  TIME_SETUP_HOUR,
-  TIME_SETUP_MINUTE,
-  TIME_SETUP_SECOND,
-  SCHEDULE_SETUP,
-  SCHEDULE_DAY_SELECT,
-  SCHEDULE_START_SELECT,
-  SCHEDULE_END_SELECT,
-  TEMP_SETUP,
-  WIFI_IDLE,
-  WIFI_SCANNING,
-  WIFI_CONNECTING,
-  WIFI_SAVING_CREDENTIALS,
-  WIFI_SHOW_LIST,
-  WIFI_PASSWORD_ENTRY,
-  SAVE_EXIT
+  MAIN_MENU,          // Главный экран
+  MENU_NAVIGATION,    // Навигация по меню
+  TIME_SETUP,         // Настройка времени
+  TIME_SETUP_YEAR,    // Настройка года
+  TIME_SETUP_MONTH,   // Настройка месяца
+  TIME_SETUP_DAY,     // Настройка дня
+  TIME_SETUP_HOUR,    // Настройка часов
+  TIME_SETUP_MINUTE,  // Настройка минут
+  TIME_SETUP_SECOND,  // Настройка секунд
+  SCHEDULE_SETUP,     // Настройка расписания
+  SCHEDULE_DAY_SELECT,// Выбор дня недели
+  SCHEDULE_START_SELECT, // Настройка времени старта
+  SCHEDULE_END_SELECT,   // Настройка времени окончания
+  TEMP_SETUP,         // Настройка температуры
+  WIFI_SETUP,         // Настройка Wi-Fi
+  WIFI_SCAN,
+  WIFI_LIST,
+  WIFI_PASSWORD_INPUT,
+  SAVE_EXIT           // Сохранение и выход
 };
 
-// Элементы меню
+// Конфигурация меню
 const char* mainMenuItems[] = {
   "Настройки времени",
   "Расписание",
@@ -143,6 +141,11 @@ unsigned long lastButtonPress = 0;
 long oldEncoderPos = 0;
 
 // Прототипы функций
+void checkTemperatureProtection(float temp);
+void saveSchedule();
+uint32_t getNextStartTime(DateTime now);
+void showSaveMessage();
+char FontUtf8Rus(const byte ch);
 void loadSchedule();
 void connectToWiFi(const char* ssid, const char* password);
 void handleRoot();
@@ -169,13 +172,15 @@ void displayTemperature(float temp);
 void setup() {
   Serial.begin(115200);
   pinMode(ENCODER_SW, INPUT_PULLUP);
-  pinMode(GPIO_CONTROL, OUTPUT);
 
+  // Инициализация энкодера с фильтром дребезга
   encoder.attachSingleEdge(ENCODER_CLK, ENCODER_DT);
-  encoder.setFilter(1023);
+  encoder.setFilter(1023); // Установка фильтра (значение от 0 до 1023)
 
+  // Инициализация I2C
   Wire.begin(I2C_SDA, I2C_SCL);
 
+  // Инициализация OLED
   if(!oled.init()) {
     Serial.println("Ошибка OLED!");
     while(1);
@@ -192,23 +197,28 @@ void setup() {
   if (savedSSID != "") {
     connectToWiFi(savedSSID.c_str(), savedPass.c_str());
   } else {
-    connectToWiFi(ssid, password);
+  // Используйте свои значения по умолчанию
+  connectToWiFi("SSID", "Password");
   }
 
+  // Инициализация RTC
   if (!rtc.begin()) {
-    showDisplayError("Ошибка RTC!");
+    showDisplayError("Ошибка модуля RTC!");
     while(1);
   }
 
+  // Инициализация датчика температуры
   sensors.begin();
-  if (sensors.getDeviceCount() == 0) {
-    showDisplayError("Ошибка датчика!");
+  if (sensors.getDeviceCount() == 0) { // Проверка наличия датчика
+    showDisplayError("Ошибка датчика температуры!");
     while(1);
   }
 
+  // Загрузка расписания
   preferences.begin("schedule", false);
   loadSchedule();
 
+  // Синхронизация времени
   if(WiFi.status() == WL_CONNECTED) {
     timeClient.begin();
     if(timeClient.update()) {
@@ -217,11 +227,14 @@ void setup() {
     }
   }
 
+  // Веб-сервер
   server.on("/", handleRoot);
   server.on("/set", handleSetSchedule);
   server.begin();
 
-  display.setBrightness(7);
+  // Инициализация TM1637
+  display.setBrightness(7); // Яркость дисплея (0-7)
+
   updateDisplay(rtc.now(), sensors.getTempCByIndex(0));
 }
 
@@ -229,56 +242,81 @@ void loop() {
   server.handleClient();
   DateTime now = rtc.now();
 
-  static unsigned long lastWifiUpdate =0;
+  static unsigned long lastUpdate = 0;
+
   if (millis() - lastUpdate >= 1000) {
     lastUpdate = millis();
 
     sensors.requestTemperatures();
     float temp = sensors.getTempCByIndex(0);
+
+    // Проверяем температуру и управляем GPIO 5
     checkTemperatureProtection(temp);
 
+    // Обновляем главный экран только если не в меню
     if (currentMenu == MAIN_MENU) {
       checkSchedule(now);
       drawMainMenu();
     }
 
+    // Проверяем состояние GPIO 5
     if (gpioState) {
+      // Если GPIO 5 активен, отображаем температуру
       displayTemperature(temp);
     } else {
-      displayTime(getNextStartTime(now));
+      // Если GPIO 5 не активен, отображаем ближайшее время включения
+      uint32_t nextStartTime = getNextStartTime(now);
+      displayTime(nextStartTime);
     }
   }
 
-  if(currentMenu == WiFi LIST && millis()-lastScanTime >= SCAN INTERVAL){
-    WiFi.scanDelete();
-    WiFi.scanNetworks(true);
-    currentMenu = WiFi SCAN;
-    lastScanTime = millis();
-    updateMenu();
-   }
+  if(currentMenu == WIFI_SCAN) {
+    int scanStatus = WiFi.scanComplete();
+    if(scanStatus >= 0) {
+      wifiNetworkCount = min(scanStatus, 15);
+      for(int i=0; i<wifiNetworkCount; i++) {
+        wifiNetworks[i].ssid = WiFi.SSID(i);
+        wifiNetworks[i].rssi = WiFi.RSSI(i);
+        wifiNetworks[i].secured = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+      }
+      currentMenu = WIFI_LIST;
+      selectedNetwork = 0;
+      updateMenu();
+    }
+  }
 
   handleEncoder();
   handleButton();
 }
 
-// OLED функции
+// ====================== OLED Функции ====================== //
 void updateDisplay(DateTime now, float temp) {
-  if(currentMenu != MAIN_MENU) return;
+  if(currentMenu != MAIN_MENU) return; // Не обновляем, если не в главном меню
 
   oled.clear();
   oled.setFont(ArialRus_Plain_10);
 
-  uint8_t dayOfWeek = (now.dayOfTheWeek() + 6) % 7;
-  char timeStr[40];
+  // Получаем текущий день недели (0 = понедельник, 6 = воскресенье)
+  uint8_t dayOfWeek = (now.dayOfTheWeek() + 6) % 7; // Преобразуем в формат 0-6 (Пн-Вс)
+
+  // Форматирование дня недели и времени
+  char timeStr[40]; // Увеличиваем буфер для полных названий дней недели
   sprintf(timeStr, "%s  %02d:%02d:%02d", daysOfWeek[dayOfWeek], now.hour(), now.minute(), now.second());
+
+  // Вывод дня недели и времени в первой строке
   oled.drawString(LEFT_PADDING, TOP_PADDING, timeStr);
 
+  // Форматирование температуры
   char tempStr[10];
   sprintf(tempStr, "%+.1fC", temp);
+
+  // Вывод температуры во второй строке
   oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tempStr);
 
+  // Состояние GPIO (реле)
   oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, gpioState ? "В РАБОТЕ" : "ОЖИДАНИЕ");
 
+  // Статус Wi-Fi
   if(WiFi.status() != WL_CONNECTED) {
     oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, "WiFi ВЫКЛЮЧЕН!");
   }
@@ -288,17 +326,21 @@ void updateDisplay(DateTime now, float temp) {
 
 void showDisplayError(const char* msg) {
   oled.clear();
+  oled.setFont(ArialRus_Plain_10);
   oled.drawString(0, 0, msg);
   oled.display();
 }
 
-// TM1637 функции
+// ====================== TM1637 Функции ====================== //
 void displayTime(uint32_t timeInSeconds) {
   uint8_t hours = timeInSeconds / 3600;
   uint8_t minutes = (timeInSeconds % 3600) / 60;
+
+  // Форматируем время в формат HH:MM
   display.showNumberDecEx(hours * 100 + minutes, 0b01000000, true);
 }
 
+// Добавим функцию для преобразования цифры в код сегментов
 uint8_t encodeDigit(int digit) {
   return display.encodeDigit(digit);
 }
@@ -306,67 +348,252 @@ uint8_t encodeDigit(int digit) {
 void displayTemperature(float temp) {
   int16_t tempInt = round(temp);
   uint8_t segments[4] = {0};
-  segments[0] = 0b00111001;
+
+  // Отображаем символ 'C' в первой позиции
+  segments[0] = 0b00111001; // Код сегментов для 'C'
 
   if (tempInt < 0) {
-    segments[1] = 0b01000000;
+    // Для отрицательных температур: C-XX
+    segments[1] = 0b01000000; // Символ '-'
     tempInt = abs(tempInt);
     segments[2] = encodeDigit((tempInt / 10) % 10);
     segments[3] = encodeDigit(tempInt % 10);
   } else {
+    // Для положительных температур: C XX
     segments[1] = encodeDigit((tempInt / 10) % 10);
     segments[2] = encodeDigit(tempInt % 10);
-    segments[3] = 0;
+    segments[3] = 0; // Последний сегмент выключен
   }
 
   display.setSegments(segments);
 }
 
-// Меню
+// ====================== Меню ====================== //
 void updateMenu() {
+
   switch (currentMenu) {
-    case MAIN_MENU: drawMainMenu(); break;
-    case MENU_NAVIGATION: drawMenuNavigation(); break;
-    case TIME_SETUP: drawTimeSetup(); break;
+    case MAIN_MENU:
+      drawMainMenu();
+      break;
+
+    case MENU_NAVIGATION:
+      drawMenuNavigation();
+      break;
+
+    case TIME_SETUP:
+      drawTimeSetup();
+      break;
+
     case TIME_SETUP_YEAR:
     case TIME_SETUP_MONTH:
     case TIME_SETUP_DAY:
     case TIME_SETUP_HOUR:
     case TIME_SETUP_MINUTE:
-    case TIME_SETUP_SECOND: drawTimeSetupStep(); break;
+    case TIME_SETUP_SECOND:
+      drawTimeSetupStep();
+      break;
+
     case SCHEDULE_SETUP:
     case SCHEDULE_DAY_SELECT:
     case SCHEDULE_START_SELECT:
-    case SCHEDULE_END_SELECT: drawScheduleSetup(); break;
-    case TEMP_SETUP: drawTempSetup(); break;
+    case SCHEDULE_END_SELECT:
+      drawScheduleSetup();
+      break;
+
+    case TEMP_SETUP:
+      drawTempSetup();
+      break;
+
     case WIFI_SETUP:
-    case WIFI_SCAN:
-    case WIFI_LIST:
-    case WIFI_PASSWORD_INPUT: drawWiFiSetup(); break;
-    case SAVE_EXIT: drawSaveExit(); break;
-    default: currentMenu = MAIN_MENU; drawMainMenu(); break;
+      drawWiFiSetup();
+      break;
+
+    case SAVE_EXIT:
+      drawSaveExit();
+      break;
+
+    default:
+      // Если состояние меню неизвестно, возвращаемся в главное меню
+      currentMenu = MAIN_MENU;
+      drawMainMenu();
+      break;
   }
 }
 
-// Рисование элементов меню
 void drawMainMenu() {
   oled.clear();
   oled.setFont(ArialRus_Plain_10);
+
+  // Строка 1: Заголовок
   oled.drawString(LEFT_PADDING, TOP_PADDING, "Главное меню");
 
+  // Строка 2: Время и дата
   DateTime now = rtc.now();
   char timeStr[30];
   sprintf(timeStr, "%s  %02d:%02d:%02d", daysOfWeek[(now.dayOfTheWeek() + 6) % 7], now.hour(), now.minute(), now.second());
   oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, timeStr);
 
+  // Строка 3: Температура
   float temp = sensors.getTempCByIndex(0);
   char tempStr[10];
   sprintf(tempStr, "%+.1fC", temp);
   oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, tempStr);
 
+  // Строка 4: Состояние (GPIO + перегрев)
   String stateLine = gpioState ? "В РАБОТЕ" : "ОЖИДАНИЕ";
   stateLine += overheatStatus ? " / ПЕРЕГРЕВ!" : " / Штатное";
   oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, stateLine);
+
+  oled.display();
+}
+
+void drawMenuNavigation() {
+  oled.clear();
+  oled.setFont(ArialRus_Plain_10);
+  oled.drawString(LEFT_PADDING, TOP_PADDING, "== Меню ==");
+
+  for (int i = 0; i < 6; i++) {
+    int itemIndex = menuScroll + i;
+    if (itemIndex >= menuItemsCount) break;
+
+    String itemText = mainMenuItems[itemIndex];
+    if (itemIndex == menuIndex) {
+      itemText = "> " + itemText;
+    }
+
+    oled.drawString(LEFT_PADDING, TOP_PADDING + (i + 1) * LINE_HEIGHT, itemText);
+  }
+
+  // Полоса прокрутки
+  int scrollbarHeight = 50;
+  int scrollbarPos = map(menuIndex, 0, menuItemsCount - 1, 0, scrollbarHeight);
+  oled.drawVerticalLine(122, TOP_PADDING, scrollbarHeight);
+  oled.fillRect(120, TOP_PADDING + scrollbarPos, 4, 4);
+
+  oled.display();
+}
+
+void drawTimeSetup() {
+  oled.clear();
+  oled.setFont(ArialRus_Plain_10);
+
+  // Заголовок
+  oled.drawString(LEFT_PADDING, TOP_PADDING, "Настройка времени:");
+
+  // Текущее время
+  DateTime now = rtc.now();
+  char dateStr[20];
+  sprintf(dateStr, "%04d-%02d-%02d", now.year(), now.month(), now.day());
+  oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, dateStr);
+
+  char timeStr[20];
+  sprintf(timeStr, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, timeStr);
+
+  // Подсказка
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 4 * LINE_HEIGHT, "Нажмите для настройки");
+
+  oled.display();
+}
+
+void drawTimeSetupStep() {
+  oled.clear();
+  oled.setFont(ArialRus_Plain_10);
+
+  // Заголовок
+  oled.drawString(LEFT_PADDING, TOP_PADDING, "Настройка времени:");
+
+  // Отображение текущего этапа
+  switch (currentMenu) {
+    case TIME_SETUP_YEAR:
+      oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "> Год: " + String(tempYear));
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, "Месяц: " + String(tempMonth));
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, "День: " + String(tempDay));
+      break;
+    case TIME_SETUP_MONTH:
+      oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "Год: " + String(tempYear));
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, "> Месяц: " + String(tempMonth));
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, "День: " + String(tempDay));
+      break;
+    case TIME_SETUP_DAY:
+      oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "Год: " + String(tempYear));
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, "Месяц: " + String(tempMonth));
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, "> День: " + String(tempDay));
+      break;
+    case TIME_SETUP_HOUR:
+      oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "> Часы: " + String(tempHour));
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, "Минуты: " + String(tempMinute));
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, "Секунды: " + String(tempSecond));
+      break;
+    case TIME_SETUP_MINUTE:
+      oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "Часы: " + String(tempHour));
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, "> Минуты: " + String(tempMinute));
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, "Секунды: " + String(tempSecond));
+      break;
+    case TIME_SETUP_SECOND:
+      oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "Часы: " + String(tempHour));
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, "Минуты: " + String(tempMinute));
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, "> Секунды: " + String(tempSecond));
+      break;
+  }
+
+  // Подсказка
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 5 * LINE_HEIGHT, "Крути = изменить");
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 6 * LINE_HEIGHT, "Зажми = сохранить");
+
+  oled.display();
+}
+
+void drawScheduleSetup() {
+  oled.clear();
+  oled.setFont(ArialRus_Plain_10);
+
+  // Заголовок
+  oled.drawString(LEFT_PADDING, TOP_PADDING, "Настройка расписания");
+
+  // Текущий день
+  const char* days[] = {"Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"};
+  oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "День: " + String(days[currentDay]));
+
+  // Время включения
+  String startText = "Старт: " + formatTime(tempStartTime);
+  if (currentMenu == SCHEDULE_START_SELECT) {
+    startText = "> " + startText; // Подсветка строки Start
+  }
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, startText);
+
+  // Время выключения
+  String endText = "Стоп: " + formatTime(tempEndTime);
+  if (currentMenu == SCHEDULE_END_SELECT) {
+    endText = "> " + endText; // Подсветка строки End
+  }
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, endText);
+
+  // Отображение текущего шага перемотки
+  String speedText = "Шаг: " + String(encoderSpeed) + " мин";
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 4 * LINE_HEIGHT, speedText);
+
+  // Подсказка
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 5 * LINE_HEIGHT, "OK       Отмена");
+
+  oled.display();
+}
+
+void drawTempSetup() {
+  oled.clear();
+  oled.setFont(ArialRus_Plain_10);
+
+  // Заголовок
+  oled.drawString(LEFT_PADDING, TOP_PADDING, "Калибровка термометра:");
+
+  // Текущая температура
+  float temp = sensors.getTempCByIndex(0);
+  char tempStr[10];
+  sprintf(tempStr, "%+.1fC", temp);
+  oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tempStr);
+
+  // Подсказка
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, "OK       Отмена");
 
   oled.display();
 }
@@ -377,50 +604,50 @@ void drawWiFiSetup() {
 
   switch(currentMenu) {
     case WIFI_SCAN:
-      oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT*0,"Сканирование...");
-      oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT*1,"Найдено сетей:");
-      oled.drawString(LEFT_PADDING + 80, TOP_PADDING + LINE_HEIGHT*1,String(WiFi.scanComplete()).c_str());
+      oled.drawString(LEFT_PADDING, TOP_PADDING, "Сканирование Wi-Fi...");
       break;
 
     case WIFI_LIST: {
-      oled.drawString(LEFT_PADDING+30, TOP_PADDING,"Сети WiFi");
-      int startIdx = max(0, selectedNetwork - 1);
-      int endIdx = min(wifiNetworkCount-1.startIdx +3);
+      oled.drawString(LEFT_PADDING, TOP_PADDING, "Выберите сеть:");
+      int startIdx = max(0, selectedNetwork - 2);
+      int endIdx = min(wifiNetworkCount, startIdx + 4);
 
-      for(int i=startIdx; i<=endIdx; i++){ 
+      for(int i = startIdx; i < endIdx; i++) {
         String line;
-        if(i == selectedNetwork) line += ">";
-        line += wifiNetworks[i].ssid.substring(0.min(wifiNetworks[i].ssid.length(),15));
+        if(i == selectedNetwork) line = "> "; // Подсветка выбранной сети
+        line += wifiNetworks[i].ssid.substring(0, 15);
         line += " ";
-        line += wifiNetworks[i].secured ? "[🔒]" : "[ ]";
-        
-        int yPos = TOP_PADDING + LINE_HEIGHT*(i-startIdx+1);
-        if(yPos > OLED_HEIGHT-LINE_HEIGHT) break;
-        
-        oled.drawString(LEFT_PADDING,yPos.line);
-       }
-       break;
-     }
+        line += wifiNetworks[i].secured ? "🔒" : " ";
+        line += String(" (") + wifiNetworks[i].rssi + "dBm)";
+
+        oled.drawString(LEFT_PADDING, TOP_PADDING + (i - startIdx + 1)*LINE_HEIGHT, line);
+      }
+      break;
+    }
 
     case WIFI_PASSWORD_INPUT: {
       oled.drawString(LEFT_PADDING, TOP_PADDING, "Пароль для:");
       oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, wifiNetworks[selectedNetwork].ssid);
+
+      // Отображаем пароль без маскировки
       oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, wifiPassword);
-      
+
+      // Отображаем текущий выбранный символ
       String charLine = "[";
       charLine += passwordChars[selectedCharIndex];
       charLine += "]";
       oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, charLine);
-      
-      oled.drawString(LEFT_PADDING, TOP_PADDING + 5*LINE_HEIGHT, "Коротко: символ");
-      oled.drawString(LEFT_PADDING, TOP_PADDING + 6*LINE_HEIGHT, "Долго: сохранить");
+
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 5*LINE_HEIGHT, "Коротко: добавить символ");
+      oled.drawString(LEFT_PADDING, TOP_PADDING + 6*LINE_HEIGHT, "Долго: сохранить пароль");
       break;
     }
 
     default:
+      // Старая реализация
       if (WiFi.status() == WL_CONNECTED) {
         oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "Подключен");
-        oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, WiFi.localIP().toString());
+        oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, "IP: " + WiFi.localIP().toString());
       } else {
         oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "Отключен");
       }
@@ -428,59 +655,120 @@ void drawWiFiSetup() {
       break;
   }
 
-  if(currentMenu != MAIN_MENU){
-     oled.drawString(LEFT PADDING.Oled.getHeight()-LINE HEIGHT."Долгое: Назад");
-   }
-   
-   oled.display();
+  oled.display();
+}
+void drawSaveExit() {
+  oled.clear();
+  oled.setFont(ArialRus_Plain_10);
+
+  // Заголовок
+  oled.drawString(LEFT_PADDING, TOP_PADDING, "Сохранение настроек");
+
+  // Подсказка
+  oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, "Настройки сохранены!");
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, "Возвращаемся в главное меню");
+
+  oled.display();
 }
 
-// Обработчики ввода
 void handleEncoder() {
   static unsigned long lastReadTime = 0;
-  const unsigned long debounceDelay = 50;
+  const unsigned long debounceDelay = 50; // Задержка в миллисекундах
 
-  if (currentMenu == MAIN_MENU) return;
-  if (millis() - lastReadTime < debounceDelay) return;
+  if (currentMenu != MAIN_MENU) { // Только если НЕ в главном меню
+    if (millis() - lastReadTime < debounceDelay) return;
 
-  long newPos = encoder.getCount();
-  static long oldPos = -1;
+    long newPos = encoder.getCount();
+    static long oldPos = -1;
 
-  if (oldPos == -1) oldPos = newPos;
-  if (newPos == oldPos) return;
+    if (oldPos == -1) {
+      oldPos = newPos;
+      return;
+    }
 
-  int delta = (newPos > oldPos) ? 1 : -1;
-  unsigned long currentTime = millis();
-  
-  if (currentTime - lastEncoderChange < 200) {
-    encoderSpeed = constrain(encoderSpeed + 1, 1, maxSpeed);
-  } else {
-    encoderSpeed = 1;
+    if (newPos != oldPos) {
+      int delta = (newPos > oldPos) ? 1 : -1;
+
+      // Определяем скорость вращения энкодера
+      unsigned long currentTime = millis();
+      if (currentTime - lastEncoderChange < 200) { // Если вращение быстрое
+        encoderSpeed = constrain(encoderSpeed + 1, 1, maxSpeed); // Увеличиваем шаг
+      } else {
+        encoderSpeed = 1; // Сбрасываем шаг, если вращение медленное
+      }
+      lastEncoderChange = currentTime;
+
+      // Обработка изменения позиции энкодера
+      switch (currentMenu) {
+        case TIME_SETUP_YEAR:
+          tempYear = constrain(tempYear + delta * encoderSpeed, 2000, 2099);
+          break;
+
+        case TIME_SETUP_MONTH:
+          tempMonth = constrain(tempMonth + delta * encoderSpeed, 1, 12);
+          break;
+
+        case TIME_SETUP_DAY:
+          tempDay = constrain(tempDay + delta * encoderSpeed, 1, 31);
+          break;
+
+        case TIME_SETUP_HOUR:
+          tempHour = constrain(tempHour + delta * encoderSpeed, 0, 23);
+          break;
+
+        case TIME_SETUP_MINUTE:
+          tempMinute = constrain(tempMinute + delta * encoderSpeed, 0, 59);
+          break;
+
+        case TIME_SETUP_SECOND:
+          tempSecond = constrain(tempSecond + delta * encoderSpeed, 0, 59);
+          break;
+
+        case MENU_NAVIGATION:
+          menuIndex = constrain(menuIndex + delta, 0, menuItemsCount - 1);
+          if (menuIndex < menuScroll) {
+            menuScroll = menuIndex;
+          } else if (menuIndex >= menuScroll + 4) {
+            menuScroll = menuIndex - 3;
+          }
+          menuScroll = constrain(menuScroll, 0, menuItemsCount - 4);
+          break;
+
+        case SCHEDULE_DAY_SELECT:
+          currentDay = (currentDay + delta + 7) % 7;
+          break;
+
+        case SCHEDULE_START_SELECT:
+          tempStartTime = (tempStartTime + delta * encoderSpeed * 60) % 86400;
+          break;
+
+        case SCHEDULE_END_SELECT:
+          tempEndTime = (tempEndTime + delta * encoderSpeed * 60) % 86400;
+          break;
+
+        case WIFI_LIST:
+          if(newPos != oldPos) {
+            selectedNetwork = constrain(selectedNetwork + delta, 0, wifiNetworkCount-1);
+            updateMenu();
+          }
+          break;
+
+        case WIFI_PASSWORD_INPUT:
+          if(newPos != oldPos) {
+            selectedCharIndex = (selectedCharIndex + delta + strlen(passwordChars)) % strlen(passwordChars);
+            updateMenu();
+          }
+          break;
+
+        default:
+          break;
+      }
+
+      oldPos = newPos;
+      lastReadTime = millis();
+      updateMenu(); // Обновляем экран после изменения значения
+    }
   }
-  lastEncoderChange = currentTime;
-
-  switch (currentMenu) {
-    case MENU_NAVIGATION:
-      menuIndex = constrain(menuIndex + delta, 0, menuItemsCount - 1);
-      if (menuIndex < menuScroll) menuScroll = menuIndex;
-      else if (menuIndex >= menuScroll + 4) menuScroll = menuIndex - 3;
-      menuScroll = constrain(menuScroll, 0, menuItemsCount - 4);
-      break;
-
-    case WIFI_LIST:
-      selectedNetwork = constrain(selectedNetwork + delta, 0, wifiNetworkCount-1);
-      break;
-
-    case WIFI_PASSWORD_INPUT:
-      selectedCharIndex = (selectedCharIndex + delta + strlen(passwordChars)) % strlen(passwordChars);
-      break;
-
-    // Другие case...
-  }
-
-  oldPos = newPos;
-  lastReadTime = millis();
-  updateMenu();
 }
 
 void handleButton() {
@@ -494,17 +782,22 @@ void handleButton() {
   if (btnState == HIGH && buttonPressed) {
     buttonPressed = false;
     unsigned long duration = millis() - lastButtonPress;
-    if (duration < 50) return;
+
+    if (duration < 50) return; // Игнорируем дребезг
 
     if (currentMenu == MAIN_MENU) {
+      // Переход в меню
       currentMenu = MENU_NAVIGATION;
       menuIndex = 0;
       menuScroll = 0;
+      updateMenu(); // Обновляем дисплей при переходе в меню
     } else {
-      if (duration < 1000) handleShortPress();
-      else handleLongPress();
+      if (duration < 1000) {
+        handleShortPress();
+      } else {
+        handleLongPress();
+      }
     }
-    updateMenu();
   }
 }
 
@@ -650,8 +943,6 @@ void handleShortPress() {
 }
 
 void handleLongPress() {
-  unsigned long duration=millis()-lastButtonPress;
-  
   if (currentMenu >= TIME_SETUP_YEAR && currentMenu <= TIME_SETUP_SECOND) {
     // Сохраняем настройки времени
     rtc.adjust(DateTime(tempYear, tempMonth, tempDay, tempHour, tempMinute, tempSecond));
@@ -660,11 +951,17 @@ void handleLongPress() {
     drawMainMenu();
   }
 
- if(currentMenu >=WIFISETUP && currentMenu <=WIFIPASSWORDINPUT){
-    currentMenu=MAINMENU;
-    updateMenu(); 
-    return; 
- }
+  if(currentMenu == WIFI_PASSWORD_INPUT) {
+    // Проверяем, что кнопка удерживалась более 3 секунд
+    unsigned long duration = millis() - lastButtonPress;
+    if (duration >= 3000) {
+      // Сохранить пароль и подключиться
+      preferences.putString("wifi_ssid", wifiNetworks[selectedNetwork].ssid);
+      preferences.putString("wifi_pass", wifiPassword);
+      connectToWiFi(wifiNetworks[selectedNetwork].ssid.c_str(), wifiPassword.c_str());
+      currentMenu = MAIN_MENU;
+    }
+  }
 }
 
 // ====================== Остальные функции ====================== //
@@ -735,13 +1032,10 @@ uint32_t parseTime(String timeStr) {
   return h*3600 + m*60;
 }
 
-void connectToWiFi(const char* ssid.const char* password){
-  preferences.begin("wifi".false);
-  preferences.putString("wifi_ssid".ssid);
-  preferences.putString("wifi_pass".password); 
-  preferences.end();
+void connectToWiFi(const char* ssid, const char* password) {
+  WiFi.disconnect();
   WiFi.begin(ssid, password);
-  
+
   unsigned long start = millis();
   while(WiFi.status() != WL_CONNECTED && millis()-start < 15000) {
     delay(500);
@@ -750,7 +1044,7 @@ void connectToWiFi(const char* ssid.const char* password){
     oled.drawString(0, 12, ssid);
     oled.display();
   }
-  
+
   if(WiFi.status() == WL_CONNECTED) {
     // Синхронизация времени
     timeClient.update();
@@ -764,7 +1058,7 @@ void saveAndExit() {
   oled.setFont(ArialRus_Plain_10);
   oled.drawString(0, 0, "Настройки сохранены!");
   oled.display();
-  delay(2000); 
+  delay(2000);
   currentMenu = MAIN_MENU;
   // Убираем вызов updateMenu(), чтобы избежать двойной перерисовки
   drawMainMenu(); // Принудительно рисуем главный экран
