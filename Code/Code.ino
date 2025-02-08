@@ -17,6 +17,7 @@ WiFiManager wifi(timeManager, scheduler);
 EncoderHandler encoder;
 MenuSystem menu(display, encoder, timeManager, scheduler, wifi, tempControl);
 
+// Инициализация периферии и загрузка сохраненных настроек
 void setup() {
 	Serial.begin(115200);
 	timeManager.init();
