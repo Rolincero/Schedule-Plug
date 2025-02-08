@@ -1,102 +1,122 @@
-#include <Wire.h>
-#include <RTClib.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
-#include <WiFi.h>
-#include <WebServer.h>
-#include <Preferences.h>
-#include <WiFiUdp.h>
-#include <NTPClient.h>
-#include <SSD1306Wire.h>
-#include <ESP32Encoder.h>
-#include <TM1637Display.h>
-#include "fontsRus.h"
+#include <Wire.h>               // Arduino Core ESP32 https://github.com/espressif/arduino-esp32
+#include <RTClib.h>             // Adafruit RTC lib https://github.com/adafruit/RTClib
+#include <OneWire.h>            // https://github.com/PaulStoffregen/OneWire
+#include <DallasTemperature.h>  // DS18B20 driver https://github.com/milesburton/Arduino-Temperature-Control-Library
+#include <WiFi.h>               // Arduino Core ESP32 https://github.com/espressif/arduino-esp32
+#include <WebServer.h>          // Arduino Core ESP32 https://github.com/espressif/arduino-esp32
+#include <Preferences.h>        // Arduino Core ESP32 https://github.com/espressif/arduino-esp32
+#include <WiFiUdp.h>            // Arduino Core ESP32 https://github.com/espressif/arduino-esp32
+#include <NTPClient.h>          // Still need description? https://github.com/arduino-libraries/NTPClient
+#include <SSD1306Wire.h>        // OLED display SSD1306 driver https://github.com/ThingPulse/esp8266-oled-ssd1306
+#include <ESP32Encoder.h>       // https://github.com/madhephaestus/ESP32Encoder
+#include <TM1637Display.h>      // TM1637 Driver https://github.com/avishorp/TM1637
+#include "fontsRus.h"           // Still don't know where i got it
 
-// Конфигурация пинов
-#define TM1637_CLK 18     // Новый пин CLK для TM1637
-#define TM1637_DIO 19     // Новый пин DIO для TM1637
-#define TEMP_PIN 4        // DS18B20
-#define GPIO_CONTROL 5    // Реле
-#define ENCODER_CLK 23    // Энкодер CLK
-#define ENCODER_DT 25     // Энкодер DT
-#define ENCODER_SW 26     // Энкодер SW
-#define I2C_SDA 21        // OLED SDA
-#define I2C_SCL 22        // OLED SCL
+//  ▗▄▄▖ ▗▄▄▄▖▗▖  ▗▖ ▗▄▖ ▗▖ ▗▖▗▄▄▄▖
+//  ▐▌ ▐▌  █  ▐▛▚▖▐▌▐▌ ▐▌▐▌ ▐▌  █  
+//  ▐▛▀▘   █  ▐▌ ▝▜▌▐▌ ▐▌▐▌ ▐▌  █  
+//  ▐▌   ▗▄█▄▖▐▌  ▐▌▝▚▄▞▘▝▚▄▞▘  █  
 
-// Настройки шрифта
-const int LINE_HEIGHT = 12;  // Высота строки
-const int TOP_PADDING = 5;   // Отступ сверху
-const int LEFT_PADDING = 5;  // Отступ слева
+#define TM1637_CLK 18             // CLK для TM1637
+#define TM1637_DIO 19             // DIO для TM1637
+#define TEMP_PIN 4                // DS18B20
+#define GPIO_CONTROL 5            // Сигнал управления/реле
+#define ENCODER_CLK 23            // Энкодер CLK
+#define ENCODER_DT 25             // Энкодер DT
+#define ENCODER_SW 26             // Энкодер SW
+#define I2C_SDA 21                // OLED SDA
+#define I2C_SCL 22                // OLED SCL
 
-// Переменные контроля температуры
+//   ▗▄▄▖ ▗▄▖ ▗▖  ▗▖▗▄▄▄▖ ▗▄▄▖▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖▗▄▄▄▖ ▗▄▄▖
+//  ▐▌   ▐▌ ▐▌▐▛▚▖▐▌  █  ▐▌     █  ▐▌ ▐▌▐▛▚▖▐▌  █  ▐▌   
+//  ▐▌   ▐▌ ▐▌▐▌ ▝▜▌  █   ▝▀▚▖  █  ▐▛▀▜▌▐▌ ▝▜▌  █   ▝▀▚▖
+//  ▝▚▄▄▖▝▚▄▞▘▐▌  ▐▌  █  ▗▄▄▞▘  █  ▐▌ ▐▌▐▌  ▐▌  █  ▗▄▄▞▘
+
+const int LINE_HEIGHT = 12;             // Высота строки
+const int TOP_PADDING = 5;              // Отступ сверху
+const int LEFT_PADDING = 5;             // Отступ слева
+const int menuItemsCount = 5;           // Количество пунктов меню настроек
 const float TEMP_HIGH_THRESHOLD = 75.0; // Порог высокой температуры (75°C)
 const float TEMP_LOW_THRESHOLD = 50.0;  // Порог низкой температуры (50°C)
+const int maxSpeed = 20;                // Максимальный шаг изменения времени (20 минут)
+
+//  ▗▖  ▗▖ ▗▄▖ ▗▄▄▖ ▗▄▄▄▖ ▗▄▖ ▗▄▄▖ ▗▖   ▗▄▄▄▖ ▗▄▄▖
+//  ▐▌  ▐▌▐▌ ▐▌▐▌ ▐▌  █  ▐▌ ▐▌▐▌ ▐▌▐▌   ▐▌   ▐▌   
+//  ▐▌  ▐▌▐▛▀▜▌▐▛▀▚▖  █  ▐▛▀▜▌▐▛▀▚▖▐▌   ▐▛▀▀▘ ▝▀▚▖
+//   ▝▚▞▘ ▐▌ ▐▌▐▌ ▐▌▗▄█▄▖▐▌ ▐▌▐▙▄▞▘▐▙▄▄▖▐▙▄▄▖▗▄▄▞▘
+
+int tempYear = 0;                       // Переменные для настройки времени RTC
+int tempMonth = 0;                      // Переменные для настройки времени RTC
+int tempDay = 0;                        // Переменные для настройки времени RTC
+int tempHour = 0;                       // Переменные для настройки времени RTC
+int tempMinute = 0;                     // Переменные для настройки времени RTC
+int tempSecond = 0;                     // Переменные для настройки времени RTC
 bool tempProtectionActive = false;      // Флаг, указывающий, что защита от перегрева активна
-bool overheatStatus = false;            // Новая переменная: флаг перегрева
+bool overheatStatus = false;            // Флаг перегрева
+int currentDay = 0;                     // Текущий выбранный день недели
+uint32_t tempStartTime = 0;             // Временное значение для времени старта
+uint32_t tempEndTime = 0;               // Временное значение для времени окончания
+unsigned long lastEncoderChange = 0;    // Время последнего изменения позиции энкодера
+int encoderSpeed = 1;                   // Текущий шаг изменения времени (в минутах)
+int menuIndex = 0;                      // Текущий выбранный пункт в меню.
+int menuScroll = 0;                     // Смещение для прокрутки длинных списков меню.
+bool gpioState = false;                 // Текущее состояние реле (GPIO5).
+bool timeSynced = false;                // Флаг успешной синхронизации времени через NTP.
+bool buttonPressed = false;             // Флаг нажатия кнопки энкодера.
+unsigned long lastButtonPress = 0;      // Время последнего нажатия кнопки (в миллисекундах).
+long oldEncoderPos = 0;                 // Предыдущее значение счётчика энкодера.
 
-// Отображение дня недели на главном экране
-const char* daysOfWeek[] = {"Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"};
+//   ▗▄▖ ▗▄▄▖    ▗▖▗▄▄▄▖ ▗▄▄▖▗▄▄▄▖     ▗▄▄▄▖▗▖  ▗▖▗▄▄▄▖▗▄▄▄▖
+//  ▐▌ ▐▌▐▌ ▐▌   ▐▌▐▌   ▐▌     █         █  ▐▛▚▖▐▌  █    █  
+//  ▐▌ ▐▌▐▛▀▚▖   ▐▌▐▛▀▀▘▐▌     █         █  ▐▌ ▝▜▌  █    █  
+//  ▝▚▄▞▘▐▙▄▞▘▗▄▄▞▘▐▙▄▄▖▝▚▄▄▖  █       ▗▄█▄▖▐▌  ▐▌▗▄█▄▖  █  
 
-// Переменные меню Schedule setup
-int currentDay = 0; // Текущий выбранный день недели
-uint32_t tempStartTime = 0; // Временное значение для времени старта
-uint32_t tempEndTime = 0;   // Временное значение для времени окончания
+WiFiUDP ntpUDP;                                       // Создание UDP-клиента для работы с NTP-протоколом.
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 36000);  // Инициализация NTP-клиента.
+TM1637Display display(TM1637_CLK, TM1637_DIO);        // Создание объекта для управления 7-сегментным дисплеем TM1637.
+RTC_DS3231 rtc;                                       // Инициализация модуля реального времени DS3231.
+SSD1306Wire oled(0x3C, I2C_SDA, I2C_SCL);             // Настройка OLED-дисплея с разрешением 128x64.
+OneWire oneWire(TEMP_PIN);                            // Создание шины 1-Wire для датчика температуры.
+DallasTemperature sensors(&oneWire);                  // Инициализация драйвера для DS18B20.
+ESP32Encoder encoder;                                 // Создание объекта для работы с энкодером.
+WebServer server(80);                                 // Запуск веб-сервера на порту 80.
+Preferences preferences;                              // Работа с энергонезависимой памятью (EEPROM).
 
-// Фича ускорения энкодера
-unsigned long lastEncoderChange = 0; // Время последнего изменения позиции энкодера
-int encoderSpeed = 1;                // Текущий шаг изменения времени (в минутах)
-const int maxSpeed = 20;             // Максимальный шаг изменения времени (20 минут)
+//   ▗▄▄▖▗▄▄▄▖▗▄▄▖ ▗▖ ▗▖ ▗▄▄▖▗▄▄▄▖▗▖ ▗▖▗▄▄▖ ▗▄▄▄▖ ▗▄▄▖
+//  ▐▌     █  ▐▌ ▐▌▐▌ ▐▌▐▌     █  ▐▌ ▐▌▐▌ ▐▌▐▌   ▐▌   
+//   ▝▀▚▖  █  ▐▛▀▚▖▐▌ ▐▌▐▌     █  ▐▌ ▐▌▐▛▀▚▖▐▛▀▀▘ ▝▀▚▖
+//  ▗▄▄▞▘  █  ▐▌ ▐▌▝▚▄▞▘▝▚▄▄▖  █  ▝▚▄▞▘▐▌ ▐▌▐▙▄▄▖▗▄▄▞▘
 
-// Переменные для настройки времени RTC
-int tempYear = 0;
-int tempMonth = 0;
-int tempDay = 0;
-int tempHour = 0;
-int tempMinute = 0;
-int tempSecond = 0;
-
-// Настройки NTP
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 36000); // UTC+10
-
-// Инициализация устройств I2C
-TM1637Display display(TM1637_CLK, TM1637_DIO);
-RTC_DS3231 rtc;
-SSD1306Wire oled(0x3C, I2C_SDA, I2C_SCL); // Дисплей на 0x3C
-
-// Остальные компоненты
-OneWire oneWire(TEMP_PIN);
-DallasTemperature sensors(&oneWire);
-ESP32Encoder encoder;  // Используем ESP32Encoder
-WebServer server(80);
-Preferences preferences;
-
-// Структуры данных
 struct Schedule {
   uint32_t start;
   uint32_t end;
 };
 
-// Состояния меню
+//  ▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖▗▖  ▗▖      ▗▄▖ ▗▄▄▖ ▗▄▄▖  ▗▄▖ ▗▖  ▗▖ ▗▄▄▖     ▗▄▄▄▖▗▄▄▄▖ ▗▄▄▖
+//  ▐▌   ▐▛▚▖▐▌▐▌ ▐▌▐▛▚▞▜▌     ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌ ▝▚▞▘ ▐▌        ▐▌     █  ▐▌   
+//  ▐▛▀▀▘▐▌ ▝▜▌▐▌ ▐▌▐▌  ▐▌     ▐▛▀▜▌▐▛▀▚▖▐▛▀▚▖▐▛▀▜▌  ▐▌   ▝▀▚▖     ▐▛▀▀▘  █  ▐▌   
+//  ▐▙▄▄▖▐▌  ▐▌▝▚▄▞▘▐▌  ▐▌     ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌  ▐▌  ▗▄▄▞▘     ▐▙▄▄▖  █  ▝▚▄▄▖
+
+Schedule weeklySchedule[7];       // Массив структур для хранения расписания на неделю.
+
 enum MenuState {
-  MAIN_MENU,          // Главный экран
-  MENU_NAVIGATION,    // Навигация по меню
-  TIME_SETUP,         // Настройка времени
-  TIME_SETUP_YEAR,    // Настройка года
-  TIME_SETUP_MONTH,   // Настройка месяца
-  TIME_SETUP_DAY,     // Настройка дня
-  TIME_SETUP_HOUR,    // Настройка часов
-  TIME_SETUP_MINUTE,  // Настройка минут
-  TIME_SETUP_SECOND,  // Настройка секунд
-  SCHEDULE_SETUP,     // Настройка расписания
-  SCHEDULE_DAY_SELECT,// Выбор дня недели
-  SCHEDULE_START_SELECT, // Настройка времени старта
-  SCHEDULE_END_SELECT,   // Настройка времени окончания
-  TEMP_SETUP,         // Настройка температуры
-  SAVE_EXIT           // Сохранение и выход
+  MAIN_MENU,
+  MENU_NAVIGATION,
+  TIME_SETUP,
+  TIME_SETUP_YEAR,
+  TIME_SETUP_MONTH,
+  TIME_SETUP_DAY,
+  TIME_SETUP_HOUR,
+  TIME_SETUP_MINUTE,
+  TIME_SETUP_SECOND,
+  SCHEDULE_SETUP,
+  SCHEDULE_DAY_SELECT,
+  SCHEDULE_START_SELECT,
+  SCHEDULE_END_SELECT,
+  TEMP_SETUP,
+  SAVE_EXIT
 };
 
-// Конфигурация меню
 const char* mainMenuItems[] = {
   "Настройки времени",
   "Расписание",
@@ -104,42 +124,52 @@ const char* mainMenuItems[] = {
   "Wi-Fi",
   "Сохранить настройки"
 };
-const int menuItemsCount = 5;
 
-// Глобальные переменные
-Schedule weeklySchedule[7];
-MenuState currentMenu = MAIN_MENU;
-int menuIndex = 0;
-int menuScroll = 0;
-bool gpioState = false;
-bool timeSynced = false;
-bool buttonPressed = false;
-unsigned long lastButtonPress = 0;
-long oldEncoderPos = 0;
+const char* daysOfWeek[] = {
+  "Понедельник", 
+  "Вторник", 
+  "Среда", 
+  "Четверг", 
+  "Пятница", 
+  "Суббота", 
+  "Воскресенье"
+};
 
-// Прототипы функций
-void loadSchedule();
-void connectToWiFi(const char* ssid, const char* password);
-void handleRoot();
-void handleSetSchedule();
-void checkSchedule(DateTime now);
-String formatTime(uint32_t seconds);
-uint32_t parseTime(String timeStr);
-void saveAndExit();
-void handleLongPress();
-void handleShortPress();
-void updateMenu();
-void drawMainMenu();
-void drawMenuNavigation();
-void drawTimeSetup();
-void drawScheduleSetup();
-void drawTempSetup();
-void drawSaveExit();
-void handleEncoder();
-void handleButton();
-void displayTime(uint32_t timeInSeconds);
-void displayTemperature(float temp);
+//  ▗▄▄▄▖▗▖ ▗▖▗▖  ▗▖ ▗▄▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖ ▗▄▄▖     ▗▄▄▖ ▗▄▄▖  ▗▄▖ ▗▄▄▄▖ ▗▄▖ ▗▄▄▄▖▗▖  ▗▖▗▄▄▖ ▗▄▄▄▖ ▗▄▄▖
+//  ▐▌   ▐▌ ▐▌▐▛▚▖▐▌▐▌     █    █  ▐▌ ▐▌▐▛▚▖▐▌▐▌        ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌  █  ▐▌ ▐▌  █   ▝▚▞▘ ▐▌ ▐▌▐▌   ▐▌   
+//  ▐▛▀▀▘▐▌ ▐▌▐▌ ▝▜▌▐▌     █    █  ▐▌ ▐▌▐▌ ▝▜▌ ▝▀▚▖     ▐▛▀▘ ▐▛▀▚▖▐▌ ▐▌  █  ▐▌ ▐▌  █    ▐▌  ▐▛▀▘ ▐▛▀▀▘ ▝▀▚▖
+//  ▐▌   ▝▚▄▞▘▐▌  ▐▌▝▚▄▄▖  █  ▗▄█▄▖▝▚▄▞▘▐▌  ▐▌▗▄▄▞▘     ▐▌   ▐▌ ▐▌▝▚▄▞▘  █  ▝▚▄▞▘  █    ▐▌  ▐▌   ▐▙▄▄▖▗▄▄▞▘
 
+void loadSchedule();                                        // Загружает расписание из энергонезависимой памяти (EEPROM).
+void connectToWiFi(const char* ssid, const char* password); // Подключает ESP32 к Wi-Fi.
+void handleRoot();                                          // Обработчик главной страницы веб-сервера.
+void handleSetSchedule();                                   // Обрабатывает данные из веб-формы.
+void checkSchedule(DateTime now);                           // Проверяет, должно ли реле быть включено по расписанию.
+String formatTime(uint32_t seconds);                        // Конвертирует время в секундах в строку ЧЧ:ММ.
+uint32_t parseTime(String timeStr);                         // Парсит строку времени ЧЧ:ММ в количество секунд.
+void saveAndExit();                                         // Сохраняет настройки в EEPROM и возвращает в главное меню.
+void handleLongPress();                                     // Обрабатывает длинное нажатие кнопки (>1 сек).
+void handleShortPress();                                    // Обрабатывает короткое нажатие кнопки (<1 сек).
+void updateMenu();                                          // Обновляет интерфейс на OLED в зависимости от состояния меню.
+void drawMainMenu();                                        // Рисует главный экран устройства
+void drawMenuNavigation();                                  // Отрисовывает список пунктов меню с подсветкой выбранного.
+void drawTimeSetup();                                       // Интерфейс настройки времени RTC.
+void drawScheduleSetup();                                   // Интерфейс настройки расписания.
+void drawTempSetup();                                       // Экран калибровки датчика температуры.
+void drawSaveExit();                                        // Сохраняет настройки и показывает сообщение об успешном сохранении настроек.
+void handleEncoder();                                       // Обрабатывает вращение энкодера.
+void handleButton();                                        // Обрабатывает нажатия кнопки энкодера.
+void displayTime(uint32_t timeInSeconds);                   // Выводит время на 7-сегментный дисплей TM1637.
+void displayTemperature(float temp);                        // Выводит температуру на TM1637.
+
+MenuState currentMenu = MAIN_MENU;                          // Устанавливаем главное меню первым экраном
+
+//  ▗▖  ▗▖ ▗▄▖ ▗▄▄▄▖▗▄▄▄        ▗▄▄▖▗▄▄▄▖▗▄▄▄▖▗▖ ▗▖▗▄▄▖ 
+//  ▐▌  ▐▌▐▌ ▐▌  █  ▐▌  █      ▐▌   ▐▌     █  ▐▌ ▐▌▐▌ ▐▌
+//  ▐▌  ▐▌▐▌ ▐▌  █  ▐▌  █       ▝▀▚▖▐▛▀▀▘  █  ▐▌ ▐▌▐▛▀▘ 
+//   ▝▚▞▘ ▝▚▄▞▘▗▄█▄▖▐▙▄▄▀      ▗▄▄▞▘▐▙▄▄▖  █  ▝▚▄▞▘▐▌   
+
+// Инициализация периферии и загрузка сохраненных настроек
 void setup() {
   Serial.begin(115200);
   pinMode(ENCODER_SW, INPUT_PULLUP);
@@ -192,6 +222,11 @@ void setup() {
   updateDisplay(rtc.now(), sensors.getTempCByIndex(0));
 }
 
+//  ▗▖  ▗▖ ▗▄▖ ▗▄▄▄▖▗▄▄▄       ▗▖    ▗▄▖  ▗▄▖ ▗▄▄▖ 
+//  ▐▌  ▐▌▐▌ ▐▌  █  ▐▌  █      ▐▌   ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌
+//  ▐▌  ▐▌▐▌ ▐▌  █  ▐▌  █      ▐▌   ▐▌ ▐▌▐▌ ▐▌▐▛▀▘ 
+//   ▝▚▞▘ ▝▚▄▞▘▗▄█▄▖▐▙▄▄▀      ▐▙▄▄▖▝▚▄▞▘▝▚▄▞▘▐▌   
+
 void loop() {
   server.handleClient();
   DateTime now = rtc.now();
@@ -228,7 +263,11 @@ void loop() {
   handleButton();
 }
 
-// ====================== OLED Функции ====================== //
+//   ▗▄▖ ▗▖   ▗▄▄▄▖▗▄▄▄       ▗▄▄▄▖▗▖ ▗▖▗▖  ▗▖ ▗▄▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖ ▗▄▄▖
+//  ▐▌ ▐▌▐▌   ▐▌   ▐▌  █      ▐▌   ▐▌ ▐▌▐▛▚▖▐▌▐▌     █    █  ▐▌ ▐▌▐▛▚▖▐▌▐▌   
+//  ▐▌ ▐▌▐▌   ▐▛▀▀▘▐▌  █      ▐▛▀▀▘▐▌ ▐▌▐▌ ▝▜▌▐▌     █    █  ▐▌ ▐▌▐▌ ▝▜▌ ▝▀▚▖
+//  ▝▚▄▞▘▐▙▄▄▖▐▙▄▄▖▐▙▄▄▀      ▐▌   ▝▚▄▞▘▐▌  ▐▌▝▚▄▄▖  █  ▗▄█▄▖▝▚▄▞▘▐▌  ▐▌▗▄▄▞▘
+
 void updateDisplay(DateTime now, float temp) {
   if(currentMenu != MAIN_MENU) return; // Не обновляем, если не в главном меню
 
@@ -270,7 +309,11 @@ void showDisplayError(const char* msg) {
   oled.display();
 }
 
-// ====================== TM1637 Функции ====================== //
+//  ▗▄▄▄▖▗▖  ▗▖█ ▄▄▄▄ ▄▄▄▄ ▗▄▄▄▖     ▗▄▄▄▖▗▖ ▗▖▗▖  ▗▖ ▗▄▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖ ▗▄▄▖
+//    █  ▐▛▚▞▜▌█ █       █    ▐▌     ▐▌   ▐▌ ▐▌▐▛▚▖▐▌▐▌     █    █  ▐▌ ▐▌▐▛▚▖▐▌▐▌   
+//    █  ▐▌  ▐▌█ █▀▀█ ▀▀▀█    ▐▌     ▐▛▀▀▘▐▌ ▐▌▐▌ ▝▜▌▐▌     █    █  ▐▌ ▐▌▐▌ ▝▜▌ ▝▀▚▖
+//    █  ▐▌  ▐▌█ █▄▄█ ▄▄▄█    ▐▌     ▐▌   ▝▚▄▞▘▐▌  ▐▌▝▚▄▄▖  █  ▗▄█▄▖▝▚▄▞▘▐▌  ▐▌▗▄▄▞▘
+
 void displayTime(uint32_t timeInSeconds) {
   uint8_t hours = timeInSeconds / 3600;
   uint8_t minutes = (timeInSeconds % 3600) / 60;
@@ -307,7 +350,11 @@ void displayTemperature(float temp) {
   display.setSegments(segments);
 }
 
-// ====================== Меню ====================== //
+//  ▗▖  ▗▖▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖
+//  ▐▛▚▞▜▌▐▌   ▐▛▚▖▐▌▐▌ ▐▌
+//  ▐▌  ▐▌▐▛▀▀▘▐▌ ▝▜▌▐▌ ▐▌
+//  ▐▌  ▐▌▐▙▄▄▖▐▌  ▐▌▝▚▄▞▘
+
 void updateMenu() {
   
   switch (currentMenu) {
@@ -547,6 +594,11 @@ void drawSaveExit() {
   oled.display();
 }
 
+//  ▗▖ ▗▖ ▗▄▖ ▗▖  ▗▖▗▄▄▄  ▗▖   ▗▄▄▄▖     ▗▄▄▄▖▗▖  ▗▖ ▗▄▄▖ ▗▄▖ ▗▄▄▄  ▗▄▄▄▖▗▄▄▖ 
+//  ▐▌ ▐▌▐▌ ▐▌▐▛▚▖▐▌▐▌  █ ▐▌   ▐▌        ▐▌   ▐▛▚▖▐▌▐▌   ▐▌ ▐▌▐▌  █ ▐▌   ▐▌ ▐▌
+//  ▐▛▀▜▌▐▛▀▜▌▐▌ ▝▜▌▐▌  █ ▐▌   ▐▛▀▀▘     ▐▛▀▀▘▐▌ ▝▜▌▐▌   ▐▌ ▐▌▐▌  █ ▐▛▀▀▘▐▛▀▚▖
+//  ▐▌ ▐▌▐▌ ▐▌▐▌  ▐▌▐▙▄▄▀ ▐▙▄▄▖▐▙▄▄▖     ▐▙▄▄▖▐▌  ▐▌▝▚▄▄▖▝▚▄▞▘▐▙▄▄▀ ▐▙▄▄▖▐▌ ▐▌
+
 void handleEncoder() {
   static unsigned long lastReadTime = 0;
   const unsigned long debounceDelay = 50; // Задержка в миллисекундах
@@ -633,6 +685,11 @@ void handleEncoder() {
   }
 }
 
+//  ▗▖ ▗▖ ▗▄▖ ▗▖  ▗▖▗▄▄▄  ▗▖   ▗▄▄▄▖     ▗▄▄▖ ▗▖ ▗▖▗▄▄▄▖▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖
+//  ▐▌ ▐▌▐▌ ▐▌▐▛▚▖▐▌▐▌  █ ▐▌   ▐▌        ▐▌ ▐▌▐▌ ▐▌  █    █  ▐▌ ▐▌▐▛▚▖▐▌
+//  ▐▛▀▜▌▐▛▀▜▌▐▌ ▝▜▌▐▌  █ ▐▌   ▐▛▀▀▘     ▐▛▀▚▖▐▌ ▐▌  █    █  ▐▌ ▐▌▐▌ ▝▜▌
+//  ▐▌ ▐▌▐▌ ▐▌▐▌  ▐▌▐▙▄▄▀ ▐▙▄▄▖▐▙▄▄▖     ▐▙▄▞▘▝▚▄▞▘  █    █  ▝▚▄▞▘▐▌  ▐▌
+
 void handleButton() {
   int btnState = digitalRead(ENCODER_SW);
 
@@ -662,6 +719,11 @@ void handleButton() {
     }
   }
 }
+
+//  ▗▖ ▗▖ ▗▄▖ ▗▖  ▗▖▗▄▄▄  ▗▖   ▗▄▄▄▖      ▗▄▄▖▗▖ ▗▖ ▗▄▖ ▗▄▄▖ ▗▄▄▄▖     ▗▄▄▖ ▗▄▄▖ ▗▄▄▄▖ ▗▄▄▖ ▗▄▄▖
+//  ▐▌ ▐▌▐▌ ▐▌▐▛▚▖▐▌▐▌  █ ▐▌   ▐▌        ▐▌   ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌  █       ▐▌ ▐▌▐▌ ▐▌▐▌   ▐▌   ▐▌   
+//  ▐▛▀▜▌▐▛▀▜▌▐▌ ▝▜▌▐▌  █ ▐▌   ▐▛▀▀▘      ▝▀▚▖▐▛▀▜▌▐▌ ▐▌▐▛▀▚▖  █       ▐▛▀▘ ▐▛▀▚▖▐▛▀▀▘ ▝▀▚▖ ▝▀▚▖
+//  ▐▌ ▐▌▐▌ ▐▌▐▌  ▐▌▐▙▄▄▀ ▐▙▄▄▖▐▙▄▄▖     ▗▄▄▞▘▐▌ ▐▌▝▚▄▞▘▐▌ ▐▌  █       ▐▌   ▐▌ ▐▌▐▙▄▄▖▗▄▄▞▘▗▄▄▞▘
 
 void handleShortPress() {
   DateTime now = rtc.now(); // Перемещаем объявление переменной за пределы switch
@@ -786,7 +848,11 @@ void handleLongPress() {
   }
 }
 
-// ====================== Остальные функции ====================== //
+//   ▗▄▖ ▗▄▄▄▖▗▖ ▗▖▗▄▄▄▖▗▄▄▖      ▗▖  ▗▖▗▄▄▄▖▗▄▄▄▖▗▖ ▗▖ ▗▄▖ ▗▄▄▄   ▗▄▄▖
+//  ▐▌ ▐▌  █  ▐▌ ▐▌▐▌   ▐▌ ▐▌     ▐▛▚▞▜▌▐▌     █  ▐▌ ▐▌▐▌ ▐▌▐▌  █ ▐▌   
+//  ▐▌ ▐▌  █  ▐▛▀▜▌▐▛▀▀▘▐▛▀▚▖     ▐▌  ▐▌▐▛▀▀▘  █  ▐▛▀▜▌▐▌ ▐▌▐▌  █  ▝▀▚▖
+//  ▝▚▄▞▘  █  ▐▌ ▐▌▐▙▄▄▖▐▌ ▐▌     ▐▌  ▐▌▐▙▄▄▖  █  ▐▌ ▐▌▝▚▄▞▘▐▙▄▄▀ ▗▄▄▞▘
+
 void checkTemperatureProtection(float temp) {
   if (temp >= TEMP_HIGH_THRESHOLD) {
     digitalWrite(GPIO_CONTROL, LOW);
@@ -928,19 +994,15 @@ void showSaveMessage() {
 
 char FontUtf8Rus(const byte ch) {
     static uint8_t LASTCHAR;
-
     if ((LASTCHAR == 0) && (ch < 0xC0)) {
       return ch;
     }
-
     if (LASTCHAR == 0) {
         LASTCHAR = ch;
         return 0;
     }
-
     uint8_t last = LASTCHAR;
     LASTCHAR = 0;
-
     switch (last) {
         case 0xD0:
             if (ch == 0x81) return 0xA8;
@@ -951,6 +1013,5 @@ char FontUtf8Rus(const byte ch) {
             if (ch >= 0x80 && ch <= 0x8F) return ch + 0x70;
             break;
     }
-
     return (uint8_t) 0;
 }
