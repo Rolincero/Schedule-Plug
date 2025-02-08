@@ -10,7 +10,7 @@
 #include <SSD1306Wire.h>        // OLED display SSD1306 driver https://github.com/ThingPulse/esp8266-oled-ssd1306
 #include <ESP32Encoder.h>       // https://github.com/madhephaestus/ESP32Encoder
 #include <TM1637Display.h>      // TM1637 Driver https://github.com/avishorp/TM1637
-#include "fontsRus.h"           // Still don't know where i got it
+#include "fontsRus.h"           // Still don't remember where i got it. Just added Russian lang support to SSD1306.
 
 //  ▗▄▄▖ ▗▄▄▄▖▗▖  ▗▖ ▗▄▖ ▗▖ ▗▖▗▄▄▄▖
 //  ▐▌ ▐▌  █  ▐▛▚▖▐▌▐▌ ▐▌▐▌ ▐▌  █  
@@ -32,13 +32,14 @@
 //  ▐▌   ▐▌ ▐▌▐▌ ▝▜▌  █   ▝▀▚▖  █  ▐▛▀▜▌▐▌ ▝▜▌  █   ▝▀▚▖
 //  ▝▚▄▄▖▝▚▄▞▘▐▌  ▐▌  █  ▗▄▄▞▘  █  ▐▌ ▐▌▐▌  ▐▌  █  ▗▄▄▞▘
 
-const int LINE_HEIGHT = 12;             // Высота строки
-const int TOP_PADDING = 5;              // Отступ сверху
-const int LEFT_PADDING = 5;             // Отступ слева
-const int menuItemsCount = 5;           // Количество пунктов меню настроек
-const float TEMP_HIGH_THRESHOLD = 75.0; // Порог высокой температуры (75°C)
-const float TEMP_LOW_THRESHOLD = 50.0;  // Порог низкой температуры (50°C)
-const int maxSpeed = 20;                // Максимальный шаг изменения времени (20 минут)
+const int LINE_HEIGHT = 12;                             // Высота строки
+const int TOP_PADDING = 5;                              // Отступ сверху
+const int LEFT_PADDING = 5;                             // Отступ слева
+const int menuItemsCount = 5;                           // Количество пунктов меню настроек
+const float TEMP_HIGH_THRESHOLD = 75.0;                 // Порог высокой температуры (75°C)
+const float TEMP_LOW_THRESHOLD = 50.0;                  // Порог низкой температуры (50°C)
+const int maxSpeed = 20;                                // Максимальный шаг изменения времени (20 минут)
+const char* CALIBRATION_KEY = "temp_cal";               // Ключ для хранения в EEPROM
 
 //  ▗▖  ▗▖ ▗▄▖ ▗▄▄▖ ▗▄▄▄▖ ▗▄▖ ▗▄▄▖ ▗▖   ▗▄▄▄▖ ▗▄▄▖
 //  ▐▌  ▐▌▐▌ ▐▌▐▌ ▐▌  █  ▐▌ ▐▌▐▌ ▐▌▐▌   ▐▌   ▐▌   
@@ -65,6 +66,9 @@ bool timeSynced = false;                // Флаг успешной синхр�
 bool buttonPressed = false;             // Флаг нажатия кнопки энкодера.
 unsigned long lastButtonPress = 0;      // Время последнего нажатия кнопки (в миллисекундах).
 long oldEncoderPos = 0;                 // Предыдущее значение счётчика энкодера.
+float calibrationOffset = 0.0;            // Величина калибровки
+
+
 
 //   ▗▄▖ ▗▄▄▖    ▗▖▗▄▄▄▖ ▗▄▄▖▗▄▄▄▖     ▗▄▄▄▖▗▖  ▗▖▗▄▄▄▖▗▄▄▄▖
 //  ▐▌ ▐▌▐▌ ▐▌   ▐▌▐▌   ▐▌     █         █  ▐▛▚▖▐▌  █    █  
@@ -87,7 +91,7 @@ Preferences preferences;                              // Работа с эне�
 //   ▝▀▚▖  █  ▐▛▀▚▖▐▌ ▐▌▐▌     █  ▐▌ ▐▌▐▛▀▚▖▐▛▀▀▘ ▝▀▚▖
 //  ▗▄▄▞▘  █  ▐▌ ▐▌▝▚▄▞▘▝▚▄▄▖  █  ▝▚▄▞▘▐▌ ▐▌▐▙▄▄▖▗▄▄▞▘
 
-struct Schedule {
+struct Schedule {   // Структура данных для записи времени старта и стопа управляющего сигнала
   uint32_t start;
   uint32_t end;
 };
@@ -99,7 +103,7 @@ struct Schedule {
 
 Schedule weeklySchedule[7];       // Массив структур для хранения расписания на неделю.
 
-enum MenuState {
+enum MenuState {                  // Список функциональных состояний меню
   MAIN_MENU,
   MENU_NAVIGATION,
   TIME_SETUP,
@@ -117,7 +121,7 @@ enum MenuState {
   SAVE_EXIT
 };
 
-const char* mainMenuItems[] = {
+const char* mainMenuItems[] = {   // Массив названий меню настроек
   "Настройки времени",
   "Расписание",
   "Температура",
@@ -125,7 +129,7 @@ const char* mainMenuItems[] = {
   "Сохранить настройки"
 };
 
-const char* daysOfWeek[] = {
+const char* daysOfWeek[] = {      // Массив дней недели для отображения на главном экране
   "Понедельник", 
   "Вторник", 
   "Среда", 
@@ -203,6 +207,8 @@ void setup() {
     while(1);
   }
 
+  loadCalibrationOffset();
+
   // Загрузка расписания
   preferences.begin("schedule", false);
   loadSchedule();
@@ -218,6 +224,9 @@ void setup() {
 
   // Инициализация TM1637
   display.setBrightness(7); // Яркость дисплея (0-7)
+
+  // Загрузка калибровки после инициализации preferences
+  calibrationOffset = preferences.getFloat(CALIBRATION_KEY, 0.0);
 
   updateDisplay(rtc.now(), sensors.getTempCByIndex(0));
 }
@@ -237,7 +246,9 @@ void loop() {
     lastUpdate = millis();
 
     sensors.requestTemperatures();
-    float temp = sensors.getTempCByIndex(0);
+
+    // Добавляем калибровку к показаниям
+    float temp = sensors.getTempCByIndex(0) + calibrationOffset;
 
     // Проверяем температуру и управляем GPIO 5
     checkTemperatureProtection(temp);
@@ -258,7 +269,6 @@ void loop() {
       displayTime(nextStartTime);
     }
   }
-
   handleEncoder();
   handleButton();
 }
@@ -309,99 +319,6 @@ void showDisplayError(const char* msg) {
   oled.display();
 }
 
-//  ▗▄▄▄▖▗▖  ▗▖█ ▄▄▄▄ ▄▄▄▄ ▗▄▄▄▖     ▗▄▄▄▖▗▖ ▗▖▗▖  ▗▖ ▗▄▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖ ▗▄▄▖
-//    █  ▐▛▚▞▜▌█ █       █    ▐▌     ▐▌   ▐▌ ▐▌▐▛▚▖▐▌▐▌     █    █  ▐▌ ▐▌▐▛▚▖▐▌▐▌   
-//    █  ▐▌  ▐▌█ █▀▀█ ▀▀▀█    ▐▌     ▐▛▀▀▘▐▌ ▐▌▐▌ ▝▜▌▐▌     █    █  ▐▌ ▐▌▐▌ ▝▜▌ ▝▀▚▖
-//    █  ▐▌  ▐▌█ █▄▄█ ▄▄▄█    ▐▌     ▐▌   ▝▚▄▞▘▐▌  ▐▌▝▚▄▄▖  █  ▗▄█▄▖▝▚▄▞▘▐▌  ▐▌▗▄▄▞▘
-
-void displayTime(uint32_t timeInSeconds) {
-  uint8_t hours = timeInSeconds / 3600;
-  uint8_t minutes = (timeInSeconds % 3600) / 60;
-
-  // Форматируем время в формат HH:MM
-  display.showNumberDecEx(hours * 100 + minutes, 0b01000000, true);
-}
-
-// Добавим функцию для преобразования цифры в код сегментов
-uint8_t encodeDigit(int digit) {
-  return display.encodeDigit(digit);
-}
-
-void displayTemperature(float temp) {
-  int16_t tempInt = round(temp);
-  uint8_t segments[4] = {0};
-
-  // Отображаем символ 'C' в первой позиции
-  segments[0] = 0b00111001; // Код сегментов для 'C'
-
-  if (tempInt < 0) {
-    // Для отрицательных температур: C-XX
-    segments[1] = 0b01000000; // Символ '-'
-    tempInt = abs(tempInt);
-    segments[2] = encodeDigit((tempInt / 10) % 10);
-    segments[3] = encodeDigit(tempInt % 10);
-  } else {
-    // Для положительных температур: C XX
-    segments[1] = encodeDigit((tempInt / 10) % 10);
-    segments[2] = encodeDigit(tempInt % 10);
-    segments[3] = 0; // Последний сегмент выключен
-  }
-
-  display.setSegments(segments);
-}
-
-//  ▗▖  ▗▖▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖
-//  ▐▛▚▞▜▌▐▌   ▐▛▚▖▐▌▐▌ ▐▌
-//  ▐▌  ▐▌▐▛▀▀▘▐▌ ▝▜▌▐▌ ▐▌
-//  ▐▌  ▐▌▐▙▄▄▖▐▌  ▐▌▝▚▄▞▘
-
-void updateMenu() {
-  
-  switch (currentMenu) {
-    case MAIN_MENU:
-      drawMainMenu();
-      break;
-
-    case MENU_NAVIGATION:
-      drawMenuNavigation();
-      break;
-
-    case TIME_SETUP:
-      drawTimeSetup();
-      break;
-
-    case TIME_SETUP_YEAR:
-    case TIME_SETUP_MONTH:
-    case TIME_SETUP_DAY:
-    case TIME_SETUP_HOUR:
-    case TIME_SETUP_MINUTE:
-    case TIME_SETUP_SECOND:
-      drawTimeSetupStep();
-      break;
-
-    case SCHEDULE_SETUP:
-    case SCHEDULE_DAY_SELECT:
-    case SCHEDULE_START_SELECT:
-    case SCHEDULE_END_SELECT:
-      drawScheduleSetup();
-      break;
-
-    case TEMP_SETUP:
-      drawTempSetup();
-      break;
-
-    case SAVE_EXIT:
-      drawSaveExit();
-      break;
-
-    default:
-      // Если состояние меню неизвестно, возвращаемся в главное меню
-      currentMenu = MAIN_MENU;
-      drawMainMenu();
-      break;
-  }
-}
-
 void drawMainMenu() {
   oled.clear();
   oled.setFont(ArialRus_Plain_10);
@@ -416,9 +333,9 @@ void drawMainMenu() {
   oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, timeStr);
 
   // Строка 3: Температура
-  float temp = sensors.getTempCByIndex(0);
+  float temp = sensors.getTempCByIndex(0) + calibrationOffset;
   char tempStr[10];
-  sprintf(tempStr, "%+.1fC", temp);
+  sprintf(tempStr, "%+.1fC (%+.1f)", temp, calibrationOffset);
   oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, tempStr);
 
   // Строка 4: Состояние (GPIO + перегрев)
@@ -446,7 +363,7 @@ void drawMenuNavigation() {
     oled.drawString(LEFT_PADDING, TOP_PADDING + (i + 1) * LINE_HEIGHT, itemText);
   }
 
-  // Полоса прокрутки
+  // Курсор
   int scrollbarHeight = 50;
   int scrollbarPos = map(menuIndex, 0, menuItemsCount - 1, 0, scrollbarHeight);
   oled.drawVerticalLine(122, TOP_PADDING, scrollbarHeight);
@@ -566,16 +483,26 @@ void drawTempSetup() {
   oled.setFont(ArialRus_Plain_10);
 
   // Заголовок
-  oled.drawString(LEFT_PADDING, TOP_PADDING, "Калибровка термометра:");
+  oled.drawString(LEFT_PADDING, TOP_PADDING, "Калибровка температуры:");
 
-  // Текущая температура
-  float temp = sensors.getTempCByIndex(0);
-  char tempStr[10];
-  sprintf(tempStr, "%+.1fC", temp);
+  // Текущая температура с калибровкой
+  float rawTemp = sensors.getTempCByIndex(0);
+  float calibratedTemp = rawTemp + calibrationOffset;
+  
+  char tempStr[20];
+  sprintf(tempStr, "Сырая: %+.1fC", rawTemp);
   oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tempStr);
 
-  // Подсказка
-  oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, "OK       Отмена");
+  sprintf(tempStr, "Калибр: %+.1fC", calibratedTemp);
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, tempStr);
+
+  // Подстроечное значение
+  sprintf(tempStr, "Смещение: %+.1fC", calibrationOffset);
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 4*LINE_HEIGHT, tempStr);
+
+  // Подсказки управления
+  oled.drawString(LEFT_PADDING, TOP_PADDING + 6*LINE_HEIGHT, "Вращай - изменить");
+  oled.drawString(80, TOP_PADDING + 6*LINE_HEIGHT, "Удерж - сохранить");
 
   oled.display();
 }
@@ -592,6 +519,120 @@ void drawSaveExit() {
   oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, "Возвращаемся в главное меню");
 
   oled.display();
+}
+
+void showSaveMessage() {
+  oled.clear();
+  oled.setFont(ArialRus_Plain_10);
+  oled.drawString(LEFT_PADDING, TOP_PADDING, "Настройки сохранены!");
+  oled.display();
+  delay(1000); // Показываем сообщение 1 секунду
+}
+
+void saveAndExit() {
+  preferences.end();
+  oled.clear();
+  oled.setFont(ArialRus_Plain_10);
+  oled.drawString(0, 0, "Настройки сохранены!");
+  oled.display();
+  delay(2000); 
+  currentMenu = MAIN_MENU;
+  // Убираем вызов updateMenu(), чтобы избежать двойной перерисовки
+  drawMainMenu(); // Принудительно рисуем главный экран
+}
+
+
+//  ▗▄▄▄▖▗▖  ▗▖█ ▄▄▄▄ ▄▄▄▄ ▗▄▄▄▖     ▗▄▄▄▖▗▖ ▗▖▗▖  ▗▖ ▗▄▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖ ▗▄▄▖
+//    █  ▐▛▚▞▜▌█ █       █    ▐▌     ▐▌   ▐▌ ▐▌▐▛▚▖▐▌▐▌     █    █  ▐▌ ▐▌▐▛▚▖▐▌▐▌   
+//    █  ▐▌  ▐▌█ █▀▀█ ▀▀▀█    ▐▌     ▐▛▀▀▘▐▌ ▐▌▐▌ ▝▜▌▐▌     █    █  ▐▌ ▐▌▐▌ ▝▜▌ ▝▀▚▖
+//    █  ▐▌  ▐▌█ █▄▄█ ▄▄▄█    ▐▌     ▐▌   ▝▚▄▞▘▐▌  ▐▌▝▚▄▄▖  █  ▗▄█▄▖▝▚▄▞▘▐▌  ▐▌▗▄▄▞▘
+
+void displayTime(uint32_t timeInSeconds) {
+  uint8_t hours = timeInSeconds / 3600;
+  uint8_t minutes = (timeInSeconds % 3600) / 60;
+
+  // Форматируем время в формат HH:MM
+  display.showNumberDecEx(hours * 100 + minutes, 0b01000000, true);
+}
+
+// Добавим функцию для преобразования цифры в код сегментов
+uint8_t encodeDigit(int digit) {
+  return display.encodeDigit(digit);
+}
+
+void displayTemperature(float temp) {
+  int16_t tempInt = round(temp);
+  uint8_t segments[4] = {0};
+
+  // Отображаем символ 'C' в первой позиции
+  segments[0] = 0b00111001; // Код сегментов для 'C'
+
+  if (tempInt < 0) {
+    // Для отрицательных температур: C-XX
+    segments[1] = 0b01000000; // Символ '-'
+    tempInt = abs(tempInt);
+    segments[2] = encodeDigit((tempInt / 10) % 10);
+    segments[3] = encodeDigit(tempInt % 10);
+  } else {
+    // Для положительных температур: C XX
+    segments[1] = encodeDigit((tempInt / 10) % 10);
+    segments[2] = encodeDigit(tempInt % 10);
+    segments[3] = 0; // Последний сегмент выключен
+  }
+
+  display.setSegments(segments);
+}
+
+//  ▗▖  ▗▖▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖
+//  ▐▛▚▞▜▌▐▌   ▐▛▚▖▐▌▐▌ ▐▌
+//  ▐▌  ▐▌▐▛▀▀▘▐▌ ▝▜▌▐▌ ▐▌
+//  ▐▌  ▐▌▐▙▄▄▖▐▌  ▐▌▝▚▄▞▘
+
+void updateMenu() {
+  
+  switch (currentMenu) {
+    case MAIN_MENU:
+      drawMainMenu();
+      break;
+
+    case MENU_NAVIGATION:
+      drawMenuNavigation();
+      break;
+
+    case TIME_SETUP:
+      drawTimeSetup();
+      break;
+
+    case TIME_SETUP_YEAR:
+    case TIME_SETUP_MONTH:
+    case TIME_SETUP_DAY:
+    case TIME_SETUP_HOUR:
+    case TIME_SETUP_MINUTE:
+    case TIME_SETUP_SECOND:
+      drawTimeSetupStep();
+      break;
+
+    case SCHEDULE_SETUP:
+    case SCHEDULE_DAY_SELECT:
+    case SCHEDULE_START_SELECT:
+    case SCHEDULE_END_SELECT:
+      drawScheduleSetup();
+      break;
+
+    case TEMP_SETUP:
+      drawTempSetup();
+      break;
+
+    case SAVE_EXIT:
+      drawSaveExit();
+      break;
+
+    default:
+      // Если состояние меню неизвестно, возвращаемся в главное меню
+      currentMenu = MAIN_MENU;
+      drawMainMenu();
+      break;
+  }
 }
 
 //  ▗▖ ▗▖ ▗▄▖ ▗▖  ▗▖▗▄▄▄  ▗▖   ▗▄▄▄▖     ▗▄▄▄▖▗▖  ▗▖ ▗▄▄▖ ▗▄▖ ▗▄▄▄  ▗▄▄▄▖▗▄▄▖ 
@@ -672,6 +713,16 @@ void handleEncoder() {
 
         case SCHEDULE_END_SELECT:
           tempEndTime = (tempEndTime + delta * encoderSpeed * 60) % 86400;
+          break;
+
+        case TEMP_SETUP:
+          if (newPos != oldPos) {
+            int delta = (newPos > oldPos) ? 1 : -1;
+            calibrationOffset += delta * 0.1; // Шаг 0.1°C
+            calibrationOffset = constrain(calibrationOffset, -10.0, 10.0); // Ограничение ±10°C
+            oldPos = newPos;
+            updateMenu();
+          }
           break;
 
         default:
@@ -838,10 +889,22 @@ void handleShortPress() {
   }
 }
 
+//  ▗▖ ▗▖ ▗▄▖ ▗▖  ▗▖▗▄▄▄  ▗▖   ▗▄▄▄▖     ▗▖    ▗▄▖ ▗▖  ▗▖ ▗▄▄▖     ▗▄▄▖ ▗▄▄▖ ▗▄▄▄▖ ▗▄▄▖ ▗▄▄▖
+//  ▐▌ ▐▌▐▌ ▐▌▐▛▚▖▐▌▐▌  █ ▐▌   ▐▌        ▐▌   ▐▌ ▐▌▐▛▚▖▐▌▐▌        ▐▌ ▐▌▐▌ ▐▌▐▌   ▐▌   ▐▌   
+//  ▐▛▀▜▌▐▛▀▜▌▐▌ ▝▜▌▐▌  █ ▐▌   ▐▛▀▀▘     ▐▌   ▐▌ ▐▌▐▌ ▝▜▌▐▌▝▜▌     ▐▛▀▘ ▐▛▀▚▖▐▛▀▀▘ ▝▀▚▖ ▝▀▚▖
+//  ▐▌ ▐▌▐▌ ▐▌▐▌  ▐▌▐▙▄▄▀ ▐▙▄▄▖▐▙▄▄▖     ▐▙▄▄▖▝▚▄▞▘▐▌  ▐▌▝▚▄▞▘     ▐▌   ▐▌ ▐▌▐▙▄▄▖▗▄▄▞▘▗▄▄▞▘
+
 void handleLongPress() {
   if (currentMenu >= TIME_SETUP_YEAR && currentMenu <= TIME_SETUP_SECOND) {
     // Сохраняем настройки времени
     rtc.adjust(DateTime(tempYear, tempMonth, tempDay, tempHour, tempMinute, tempSecond));
+    showSaveMessage();
+    currentMenu = MAIN_MENU;
+    drawMainMenu();
+  }
+
+  if (currentMenu == TEMP_SETUP) {
+    preferences.putFloat(CALIBRATION_KEY, calibrationOffset);
     showSaveMessage();
     currentMenu = MAIN_MENU;
     drawMainMenu();
@@ -854,12 +917,14 @@ void handleLongPress() {
 //  ▝▚▄▞▘  █  ▐▌ ▐▌▐▙▄▄▖▐▌ ▐▌     ▐▌  ▐▌▐▙▄▄▖  █  ▐▌ ▐▌▝▚▄▞▘▐▙▄▄▀ ▗▄▄▞▘
 
 void checkTemperatureProtection(float temp) {
-  if (temp >= TEMP_HIGH_THRESHOLD) {
+  float calibratedTemp = temp + calibrationOffset;
+
+  if (calibratedTemp >= TEMP_HIGH_THRESHOLD) {
     digitalWrite(GPIO_CONTROL, LOW);
     gpioState = false;
     tempProtectionActive = true;
     overheatStatus = true; // Активируем статус перегрева
-  } else if (temp <= TEMP_LOW_THRESHOLD && tempProtectionActive) {
+  } else if (calibratedTemp <= TEMP_LOW_THRESHOLD && tempProtectionActive) {
     digitalWrite(GPIO_CONTROL, HIGH);
     gpioState = true;
     tempProtectionActive = false;
@@ -940,17 +1005,6 @@ void connectToWiFi(const char* ssid, const char* password) {
   }
 }
 
-void saveAndExit() {
-  preferences.end();
-  oled.clear();
-  oled.setFont(ArialRus_Plain_10);
-  oled.drawString(0, 0, "Настройки сохранены!");
-  oled.display();
-  delay(2000); 
-  currentMenu = MAIN_MENU;
-  // Убираем вызов updateMenu(), чтобы избежать двойной перерисовки
-  drawMainMenu(); // Принудительно рисуем главный экран
-}
 void handleRoot() {
   String html = "<html><body><h1>Управление розеткой</h1>";
   html += "<form action='/set' method='POST'>";
@@ -984,12 +1038,13 @@ void handleSetSchedule() {
   server.send(200, "text/plain", "Расписание обновлено!");
 }
 
-void showSaveMessage() {
-  oled.clear();
-  oled.setFont(ArialRus_Plain_10);
-  oled.drawString(LEFT_PADDING, TOP_PADDING, "Настройки сохранены!");
-  oled.display();
-  delay(1000); // Показываем сообщение 1 секунду
+void loadCalibrationOffset() {
+  calibrationOffset = preferences.getFloat(CALIBRATION_KEY, 0.0);
+}
+
+
+void saveCalibrationOffset() {
+  preferences.putFloat(CALIBRATION_KEY, calibrationOffset);
 }
 
 char FontUtf8Rus(const byte ch) {
