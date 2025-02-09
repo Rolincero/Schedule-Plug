@@ -40,6 +40,9 @@ const float TEMP_HIGH_THRESHOLD = 75.0;                 // Порог высок
 const float TEMP_LOW_THRESHOLD = 50.0;                  // Порог низкой температуры (50°C)
 const int maxSpeed = 20;                                // Максимальный шаг изменения времени (20 минут)
 const char* CALIBRATION_KEY = "temp_cal";               // Ключ для хранения в EEPROM
+const unsigned long OLED_DRAW_INTERVAL = 100;           // 10 FPS OLED
+const unsigned long SENSOR_UPDATE_INTERVAL = 1000;      // 1 Hz
+const unsigned long DISPLAY_UPDATE_INTERVAL = 2000;     // 2 секунды
 
 //  ▗▖  ▗▖ ▗▄▖ ▗▄▄▖ ▗▄▄▄▖ ▗▄▖ ▗▄▄▖ ▗▖   ▗▄▄▄▖ ▗▄▄▖
 //  ▐▌  ▐▌▐▌ ▐▌▐▌ ▐▌  █  ▐▌ ▐▌▐▌ ▐▌▐▌   ▐▌   ▐▌   
@@ -66,8 +69,12 @@ bool timeSynced = false;                // Флаг успешной синхр�
 bool buttonPressed = false;             // Флаг нажатия кнопки энкодера.
 unsigned long lastButtonPress = 0;      // Время последнего нажатия кнопки (в миллисекундах).
 long oldEncoderPos = 0;                 // Предыдущее значение счётчика энкодера.
-float calibrationOffset = 0.0;            // Величина калибровки
-
+float calibrationOffset = 0.0;          // Величина калибровки
+unsigned long lastOLEDDraw = 0;
+static String lastDisplayData = "";  
+static bool displayToggle = false;   
+bool displayActiveMode = false;
+unsigned long lastDisplayUpdate = 0;
 
 
 //   ▗▄▖ ▗▄▄▖    ▗▖▗▄▄▄▖ ▗▄▄▖▗▄▄▄▖     ▗▄▄▄▖▗▖  ▗▖▗▄▄▄▖▗▄▄▄▖
@@ -130,13 +137,13 @@ const char* mainMenuItems[] = {   // Массив названий меню на
 };
 
 const char* daysOfWeek[] = {      // Массив дней недели для отображения на главном экране
-  "Понедельник", 
-  "Вторник", 
-  "Среда", 
-  "Четверг", 
-  "Пятница", 
-  "Суббота", 
-  "Воскресенье"
+  "ПН", 
+  "ВТ", 
+  "СР", 
+  "ЧТ", 
+  "ПТ", 
+  "СБ", 
+  "ВС"
 };
 
 //  ▗▄▄▄▖▗▖ ▗▖▗▖  ▗▖ ▗▄▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖ ▗▄▄▖     ▗▄▄▖ ▗▄▄▖  ▗▄▖ ▗▄▄▄▖ ▗▄▖ ▗▄▄▄▖▗▖  ▗▖▗▄▄▖ ▗▄▄▄▖ ▗▄▄▖
@@ -228,7 +235,6 @@ void setup() {
   // Загрузка калибровки после инициализации preferences
   calibrationOffset = preferences.getFloat(CALIBRATION_KEY, 0.0);
 
-  updateDisplay(rtc.now(), sensors.getTempCByIndex(0));
 }
 
 //  ▗▖  ▗▖ ▗▄▖ ▗▄▄▄▖▗▄▄▄       ▗▖    ▗▄▖  ▗▄▖ ▗▄▄▖ 
@@ -238,37 +244,32 @@ void setup() {
 
 void loop() {
   server.handleClient();
+  static unsigned long lastSensorUpdate = 0;
+  static unsigned long lastOLEDUpdate = 0;
   DateTime now = rtc.now();
 
-  static unsigned long lastUpdate = 0;
-
-  if (millis() - lastUpdate >= 1000) {
-    lastUpdate = millis();
-
+  // Обновление данных датчиков
+  if (millis() - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL) {
+    lastSensorUpdate = millis();
+    
     sensors.requestTemperatures();
-
-    // Добавляем калибровку к показаниям
     float temp = sensors.getTempCByIndex(0) + calibrationOffset;
+    checkSchedule(now);
 
-    // Проверяем температуру и управляем GPIO 5
-    checkTemperatureProtection(temp);
-
-    // Обновляем главный экран только если не в меню
-    if (currentMenu == MAIN_MENU) {
-      checkSchedule(now);
+    // Обновление TM1637
+    updateTM1637Display();
+  }
+  // Обновление OLED
+  if (millis() - lastOLEDUpdate >= OLED_DRAW_INTERVAL) {
+    lastOLEDUpdate = millis();
+    
+    if(currentMenu == MAIN_MENU) {
       drawMainMenu();
-    }
-
-    // Проверяем состояние GPIO 5
-    if (gpioState) {
-      // Если GPIO 5 активен, отображаем температуру
-      displayTemperature(temp);
     } else {
-      // Если GPIO 5 не активен, отображаем ближайшее время включения
-      uint32_t nextStartTime = getNextStartTime(now);
-      displayTime(nextStartTime);
+      updateMenu();
     }
   }
+
   handleEncoder();
   handleButton();
 }
@@ -278,40 +279,6 @@ void loop() {
 //  ▐▌ ▐▌▐▌   ▐▛▀▀▘▐▌  █      ▐▛▀▀▘▐▌ ▐▌▐▌ ▝▜▌▐▌     █    █  ▐▌ ▐▌▐▌ ▝▜▌ ▝▀▚▖
 //  ▝▚▄▞▘▐▙▄▄▖▐▙▄▄▖▐▙▄▄▀      ▐▌   ▝▚▄▞▘▐▌  ▐▌▝▚▄▄▖  █  ▗▄█▄▖▝▚▄▞▘▐▌  ▐▌▗▄▄▞▘
 
-void updateDisplay(DateTime now, float temp) {
-  if(currentMenu != MAIN_MENU) return; // Не обновляем, если не в главном меню
-
-  oled.clear();
-  oled.setFont(ArialRus_Plain_10);
-
-  // Получаем текущий день недели (0 = понедельник, 6 = воскресенье)
-  uint8_t dayOfWeek = (now.dayOfTheWeek() + 6) % 7; // Преобразуем в формат 0-6 (Пн-Вс)
-
-  // Форматирование дня недели и времени
-  char timeStr[40]; // Увеличиваем буфер для полных названий дней недели
-  sprintf(timeStr, "%s  %02d:%02d:%02d", daysOfWeek[dayOfWeek], now.hour(), now.minute(), now.second());
-
-  // Вывод дня недели и времени в первой строке
-  oled.drawString(LEFT_PADDING, TOP_PADDING, timeStr);
-
-  // Форматирование температуры
-  char tempStr[10];
-  sprintf(tempStr, "%+.1fC", temp);
-
-  // Вывод температуры во второй строке
-  oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tempStr);
-
-  // Состояние GPIO (реле)
-  oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, gpioState ? "В РАБОТЕ" : "ОЖИДАНИЕ");
-
-  // Статус Wi-Fi
-  if(WiFi.status() != WL_CONNECTED) {
-    oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, "WiFi ВЫКЛЮЧЕН!");
-  }
-
-  oled.display();
-}
-
 void showDisplayError(const char* msg) {
   oled.clear();
   oled.setFont(ArialRus_Plain_10);
@@ -320,32 +287,39 @@ void showDisplayError(const char* msg) {
 }
 
 void drawMainMenu() {
-  oled.clear();
-  oled.setFont(ArialRus_Plain_10);
-
-  // Строка 1: Заголовок
-  oled.drawString(LEFT_PADDING, TOP_PADDING, "Главное меню");
-
-  // Строка 2: Время и дата
   DateTime now = rtc.now();
   char timeStr[30];
-  sprintf(timeStr, "%s  %02d:%02d:%02d", daysOfWeek[(now.dayOfTheWeek() + 6) % 7], now.hour(), now.minute(), now.second());
-  oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, timeStr);
+  sprintf(timeStr, "%s  %02d:%02d:%02d",
+          daysOfWeek[(now.dayOfTheWeek() + 6) % 7],
+          now.hour(),
+          now.minute(),
+          now.second());
 
-  // Строка 3: Температура
   float temp = sensors.getTempCByIndex(0) + calibrationOffset;
-  char tempStr[10];
-  sprintf(tempStr, "%+.1fC (%+.1f)", temp, calibrationOffset);
-  oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, tempStr);
+  String currentData = String(timeStr) + String(temp, 1) + 
+                      String(gpioState) + String(overheatStatus);
 
-  // Строка 4: Состояние (GPIO + перегрев)
-  String stateLine = gpioState ? "В РАБОТЕ" : "ОЖИДАНИЕ";
-  stateLine += overheatStatus ? " / ПЕРЕГРЕВ!" : " / Штатное";
-  oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, stateLine);
+  if(currentData != lastDisplayData) {
+    oled.clear();
+    oled.setFont(ArialRus_Plain_10);
 
-  oled.display();
+    // Время
+    oled.drawString(LEFT_PADDING, TOP_PADDING, timeStr);
+
+    // Температура
+    char tempStr[30];
+    sprintf(tempStr, "%+.1fC (%+.1f)", temp, calibrationOffset);
+    oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tempStr);
+
+    // Состояние
+    String stateLine = String(gpioState ? "В РАБОТЕ" : "ОЖИДАНИЕ") +
+                      String(overheatStatus ? " / ПЕРЕГРЕВ!" : " / Штатное");
+    oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, stateLine);
+
+    oled.display();
+    lastDisplayData = currentData;
+  }
 }
-
 void drawMenuNavigation() {
   oled.clear();
   oled.setFont(ArialRus_Plain_10);
@@ -381,11 +355,11 @@ void drawTimeSetup() {
 
   // Текущее время
   DateTime now = rtc.now();
-  char dateStr[20];
+  char dateStr[30];
   sprintf(dateStr, "%04d-%02d-%02d", now.year(), now.month(), now.day());
   oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, dateStr);
 
-  char timeStr[20];
+  char timeStr[30];
   sprintf(timeStr, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
   oled.drawString(LEFT_PADDING, TOP_PADDING + 2 * LINE_HEIGHT, timeStr);
 
@@ -489,7 +463,7 @@ void drawTempSetup() {
   float rawTemp = sensors.getTempCByIndex(0);
   float calibratedTemp = rawTemp + calibrationOffset;
   
-  char tempStr[20];
+  char tempStr[40];
   sprintf(tempStr, "Сырая: %+.1fC", rawTemp);
   oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tempStr);
 
@@ -548,11 +522,16 @@ void saveAndExit() {
 //    █  ▐▌  ▐▌█ █▄▄█ ▄▄▄█    ▐▌     ▐▌   ▝▚▄▞▘▐▌  ▐▌▝▚▄▄▖  █  ▗▄█▄▖▝▚▄▞▘▐▌  ▐▌▗▄▄▞▘
 
 void displayTime(uint32_t timeInSeconds) {
-  uint8_t hours = timeInSeconds / 3600;
-  uint8_t minutes = (timeInSeconds % 3600) / 60;
-
-  // Форматируем время в формат HH:MM
-  display.showNumberDecEx(hours * 100 + minutes, 0b01000000, true);
+    if(timeInSeconds == 0) {
+        // Отображаем "--:--"
+        uint8_t segments[] = {0x40, 0x40, 0x40, 0x40};
+        display.setSegments(segments);
+        return;
+    }
+    
+    uint8_t hours = timeInSeconds / 3600;
+    uint8_t minutes = (timeInSeconds % 3600) / 60;
+    display.showNumberDecEx(hours * 100 + minutes, 0b01000000, true);
 }
 
 // Добавим функцию для преобразования цифры в код сегментов
@@ -561,26 +540,46 @@ uint8_t encodeDigit(int digit) {
 }
 
 void displayTemperature(float temp) {
-  int16_t tempInt = round(temp);
-  uint8_t segments[4] = {0};
-
-  // Отображаем символ 'C' в первой позиции
-  segments[0] = 0b00111001; // Код сегментов для 'C'
-
-  if (tempInt < 0) {
-    // Для отрицательных температур: C-XX
-    segments[1] = 0b01000000; // Символ '-'
+    if(temp == DEVICE_DISCONNECTED_C) {
+        // Отображаем "Err"
+        uint8_t segments[] = {0x79, 0x50, 0x50, 0x00};
+        display.setSegments(segments);
+        return;
+    }
+    
+    int16_t tempInt = round(temp * 10);
+    bool negative = tempInt < 0;
     tempInt = abs(tempInt);
-    segments[2] = encodeDigit((tempInt / 10) % 10);
-    segments[3] = encodeDigit(tempInt % 10);
-  } else {
-    // Для положительных температур: C XX
-    segments[1] = encodeDigit((tempInt / 10) % 10);
-    segments[2] = encodeDigit(tempInt % 10);
-    segments[3] = 0; // Последний сегмент выключен
-  }
+    
+    uint8_t data[4] = {
+        negative ? 0x40 : 0x00,
+        display.encodeDigit(tempInt / 100),
+        display.encodeDigit((tempInt / 10) % 10),
+        0x63 | (tempInt % 10 << 4)
+    };
+    
+    if(tempInt < 100) data[1] = 0x00;
+    display.setSegments(data);
+}
 
-  display.setSegments(segments);
+void updateTM1637Display() {
+    static bool showTemp = true;
+    
+    if (millis() - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
+        lastDisplayUpdate = millis();
+        
+        if (gpioState) {
+            if(showTemp) {
+                displayTemperature(sensors.getTempCByIndex(0) + calibrationOffset);
+            } else {
+                displayTime(getCurrentDayEndTime(rtc.now()));
+            }
+            showTemp = !showTemp;
+        } else {
+            displayTime(getNextStartTime(rtc.now()));
+            showTemp = true;
+        }
+    }
 }
 
 //  ▗▖  ▗▖▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖
@@ -731,7 +730,6 @@ void handleEncoder() {
 
       oldPos = newPos;
       lastReadTime = millis();
-      updateMenu(); // Обновляем экран после изменения значения
     }
   }
 }
@@ -756,11 +754,9 @@ void handleButton() {
     if (duration < 50) return; // Игнорируем дребезг
 
     if (currentMenu == MAIN_MENU) {
-      // Переход в меню
       currentMenu = MENU_NAVIGATION;
-      menuIndex = 0;
-      menuScroll = 0;
-      updateMenu(); // Обновляем дисплей при переходе в меню
+      oled.clear(); // Очистка экрана перед переходом
+      drawMenuNavigation();
     } else {
       if (duration < 1000) {
         handleShortPress();
@@ -768,6 +764,8 @@ void handleButton() {
         handleLongPress();
       }
     }
+    lastOLEDDraw = 0;
+    lastDisplayData = "";
   }
 }
 
@@ -1045,6 +1043,11 @@ void loadCalibrationOffset() {
 
 void saveCalibrationOffset() {
   preferences.putFloat(CALIBRATION_KEY, calibrationOffset);
+}
+
+uint32_t getCurrentDayEndTime(DateTime now) {
+    uint8_t currentDay = (now.dayOfTheWeek() + 6) % 7;
+    return weeklySchedule[currentDay].end;
 }
 
 char FontUtf8Rus(const byte ch) {
