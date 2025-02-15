@@ -1,8 +1,7 @@
 #pragma once
-
 #include <Preferences.h>
 #include <RTClib.h>
-#include "Pins.h"
+#include "RelayController.h"
 
 class ScheduleManager {
 public:
@@ -11,7 +10,7 @@ public:
     uint32_t end;
   };
 
-  ScheduleManager() : prefs() {}
+  ScheduleManager(RelayController& relay) : relay(relay) {}
 
   void load() {
     prefs.begin("schedule", true);
@@ -32,6 +31,8 @@ public:
   }
 
   bool checkSchedule(const DateTime& now) {
+    if(relay.isBlocked()) return false;
+
     uint8_t currentDay = now.dayOfTheWeek() % 7;
     uint32_t currentTime = now.hour() * 3600 + now.minute() * 60 + now.second();
     
@@ -44,32 +45,16 @@ public:
       newState = (currentTime >= daySchedule.start || currentTime <= daySchedule.end);
     }
     
+    if(newState != relay.getState()) {
+      relay.setState(newState);
+    }
     return newState;
-  }
-
-  String formatTime(uint32_t seconds) {
-    if(seconds == 0) return "--:--";
-    uint8_t h = seconds / 3600;
-    uint8_t m = (seconds % 3600) / 60;
-    char buf[6];
-    snprintf(buf, sizeof(buf), "%02d:%02d", h, m);
-    return String(buf);
-  }
-
-  uint32_t parseTime(const String& timeStr) {
-    if(timeStr.length() != 5 || timeStr[2] != ':') return 0;
-    
-    uint8_t h = timeStr.substring(0, 2).toInt();
-    uint8_t m = timeStr.substring(3, 5).toInt();
-    
-    if(h > 23 || m > 59) return 0;
-    
-    return h * 3600 + m * 60;
   }
 
   Schedule weeklySchedule[7];
 
 private:
+  RelayController& relay;
   Preferences prefs;
 
   String getKey(uint8_t day, bool isStart) {

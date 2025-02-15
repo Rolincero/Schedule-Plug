@@ -1,5 +1,5 @@
 #pragma once
-
+#include <WiFi.h>
 #include <RTClib.h>
 #include <WiFiUdp.h>
 #include <NTPClient.h>

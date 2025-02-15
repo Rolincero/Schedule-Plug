@@ -1,13 +1,14 @@
 #pragma once
-
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Preferences.h>
+#include "RelayController.h"
 #include "Pins.h"
 
 class TemperatureControl {
 public:
-  TemperatureControl() : 
+  TemperatureControl(RelayController& relay) : 
+    relay(relay), 
     oneWire(TEMP_PIN),
     sensors(&oneWire) 
   {}
@@ -15,8 +16,8 @@ public:
   void init() {
     sensors.begin();
     if(sensors.getDeviceCount() == 0) {
-      Serial.println("No temperature sensors found!");
-      while(true);
+      Serial.println("No temperature sensors!");
+      relay.emergencyShutdown();
     }
     loadCalibration();
   }
@@ -31,24 +32,13 @@ public:
     }
   }
 
-  float getTemperature() const {
-    return currentTemp;
-  }
-
-  bool isOverheated() const {
-    return overheatStatus;
-  }
-
-  void setCalibration(float offset) {
-    calibrationOffset = offset;
-    saveCalibration();
-  }
-
-  float getCalibration() const {
-    return calibrationOffset;
-  }
+  float getTemperature() const { return currentTemp; }
+  bool isOverheated() const { return overheatStatus; }
+  void setCalibration(float offset) { calibrationOffset = offset; saveCalibration(); }
+  float getCalibration() const { return calibrationOffset; }
 
 private:
+  RelayController& relay;
   OneWire oneWire;
   DallasTemperature sensors;
   Preferences prefs;
@@ -57,7 +47,12 @@ private:
   bool overheatStatus = false;
 
   void checkProtection() {
+    if(relay.isBlocked() && currentTemp <= TEMP_LOW_THRESHOLD) {
+      relay.tryReset();
+    }
+    
     if(currentTemp >= TEMP_HIGH_THRESHOLD && !overheatStatus) {
+      relay.emergencyShutdown();
       overheatStatus = true;
     }
     else if(currentTemp <= TEMP_LOW_THRESHOLD && overheatStatus) {
@@ -76,7 +71,4 @@ private:
     prefs.putFloat("calib", calibrationOffset);
     prefs.end();
   }
-
-  // Константы из Pins.h
-  static constexpr unsigned long SENSOR_UPDATE_INTERVAL = 1000;
 };
