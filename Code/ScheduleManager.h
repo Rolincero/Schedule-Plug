@@ -1,4 +1,3 @@
-// ScheduleManager.h
 #pragma once
 
 #include <Preferences.h>
