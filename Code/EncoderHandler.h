@@ -6,9 +6,9 @@ class EncoderHandler {
 public:
   enum ButtonAction {
     NONE,
-    SHORT_PRESS,
-    LONG_PRESS,
-    VERY_LONG_PRESS
+    SHORT_PRESS,    // <500ms
+    LONG_PRESS,     // >=2000ms
+    VERY_LONG_PRESS // >=20000ms
   };
 
   EncoderHandler() : encoder() {}
@@ -37,34 +37,19 @@ public:
     return action;
   }
 
-  void setEncoderSpeed(int speed) {
-    encoderSpeed = constrain(speed, 1, 20);
-  }
-
 private:
   ESP32Encoder encoder;
-  int encoderSpeed = 1;
   int rotationDelta = 0;
   ButtonAction currentAction = NONE;
   long lastEncoderPos = 0;
   bool buttonPressed = false;
-  unsigned long lastButtonPress = 0;
-  unsigned long lastRotationTime = 0;
+  unsigned long buttonPressStart = 0;
 
   void handleRotation() {
     long newPos = encoder.getCount();
     if (newPos != lastEncoderPos) {
       rotationDelta += (newPos > lastEncoderPos) ? 1 : -1;
       lastEncoderPos = newPos;
-      
-      // Автоматическая регулировка скорости
-      unsigned long now = millis();
-      if (now - lastRotationTime < 200) {
-        encoderSpeed = min(encoderSpeed + 1, 20);
-      } else {
-        encoderSpeed = 1;
-      }
-      lastRotationTime = now;
     }
   }
 
@@ -73,19 +58,19 @@ private:
     
     if (btnState == LOW && !buttonPressed) {
       buttonPressed = true;
-      lastButtonPress = millis();
+      buttonPressStart = millis();
     }
     
     if (btnState == HIGH && buttonPressed) {
       buttonPressed = false;
-      unsigned long duration = millis() - lastButtonPress;
+      unsigned long duration = millis() - buttonPressStart;
       
-      if (duration > 50) { // Антидребезг
-        if (duration < 1000) {
+      if (duration > 50) { // Debounce
+        if (duration < 500) {
           currentAction = SHORT_PRESS;
-        } else if (duration < 5000) {
+        } else if (duration >= 2000 && duration < 20000) {
           currentAction = LONG_PRESS;
-        } else {
+        } else if (duration >= 20000) {
           currentAction = VERY_LONG_PRESS;
         }
       }

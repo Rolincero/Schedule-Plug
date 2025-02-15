@@ -1,5 +1,6 @@
 #pragma once
 
+#include "WiFiManager.h"
 #include <SSD1306Wire.h>
 #include <TM1637Display.h>
 #include "fontsRus.h"
@@ -10,11 +11,11 @@
 
 class DisplayManager {
 public:
-  DisplayManager(RelayController& relay) : 
-    oled(0x3C, I2C_SDA, I2C_SCL),
-    tmDisplay(TM1637_CLK, TM1637_DIO),
-    relay(relay) 
-  {}
+  ScheduleManager* scheduler = nullptr;
+  
+
+  DisplayManager(RelayController& relay, ScheduleManager& sched) 
+  : relay(relay), scheduler(&sched) {}
 
   void init() {
     if(!oled.init()) {
@@ -28,7 +29,7 @@ public:
     tmDisplay.setBrightness(7);
   }
 
-  void updateMainScreen(const DateTime& now, float temp, bool overheatStatus) {
+  void drawMainScreen(const DateTime& now, float temp, bool overheatStatus, WiFiManager::WiFiState wifiState) {
     static String lastRenderedData;
     String newData = String(now.dayOfTheWeek()) + 
                     String(temp) + 
@@ -53,6 +54,27 @@ public:
     oled.display();
   }
 
+  void showResetAnimation(float progress) {
+	  oled.clear();
+	
+	  // Анимация прогресса
+	  int barWidth = 128 * progress;
+	  oled.fillRect(0, 20, barWidth, 10);
+	
+	  // Предупреждающий символ
+	  oled.setFont(ArialMT_Plain_24);
+	  oled.drawString(48, 40, "!");
+	
+	  oled.display();
+  }
+  
+  void showDialog(const char* message, unsigned long duration) {
+	  oled.clear();
+	  oled.drawString(0, 20, message);
+	  oled.display();
+	  delay(duration);
+  }
+
   void showError(const char* message) {
     oled.clear();
     oled.drawString(0, 0, message);
@@ -60,8 +82,8 @@ public:
   }
 
 private:
-  SSD1306Wire oled;
-  TM1637Display tmDisplay;
+  SSD1306Wire oled{0x3c, I2C_SDA, I2C_SCL};
+  TM1637Display tmDisplay{TM1637_CLK, TM1637_DIO};
   RelayController& relay;
   bool displayToggle = false;
   unsigned long lastDisplayUpdate = 0;
@@ -72,52 +94,59 @@ private:
   static constexpr unsigned long DISPLAY_UPDATE_INTERVAL = 2000;
   static const char* daysOfWeek[7];
 
-  void drawMainScreen(const DateTime& now, float temp, bool overheatStatus) {
-    oled.clear();
-    
-    // Строка 1: Дата и время с индикацией блокировки
-    char datetime[30];
-    snprintf(datetime, sizeof(datetime), "%02d:%02d %s %s", 
-             now.hour(), now.minute(), 
-             daysOfWeek[now.dayOfTheWeek()],
-             relay.isBlocked() ? "!" : " ");
-    oled.drawString(LEFT_PADDING, TOP_PADDING, datetime);
+  void drawMainScreen(const DateTime& now, float temp, bool overheatStatus, WiFiManager::WiFiState wifiState) {
+	oled.clear();
+	
+	// Строка 1: Время и день недели
+	char datetime[30];
+	snprintf(datetime, sizeof(datetime), "%02d:%02d:%02d %s", 
+			now.hour(), now.minute(), now.second(),
+			daysOfWeek[(now.dayOfTheWeek() + 6) % 7]); // Исправление индексации дней
+	oled.drawString(LEFT_PADDING, TOP_PADDING, datetime);
 
-    // Строка 2: Температура с иконкой
-    char tempStr[20];
-    snprintf(tempStr, sizeof(tempStr), "%s %+.1fC", 
-             overheatStatus ? "🔥" : "🌡", temp);
-    oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tempStr);
+	// Строка 2: Температура и статус
+	char tempStr[20];
+	snprintf(tempStr, sizeof(tempStr), "%.0fC %s", 
+			temp, 
+			overheatStatus ? "Перегрев" : "Норма");
+	oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tempStr);
 
-    // Строка 3: Статус реле
-    String status = String(relay.getState() ? "ON " : "OFF ");
-    if(relay.isBlocked()) {
-      status += "(BLOCKED)";
-    }
-    oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, status);
+	// Строка 3: Состояние реле
+	String status = relay.getState() ? "АКТИВНО" : "ОЖИДАНИЕ";
+	if(relay.isBlocked()) status += " (БЛОКИРОВКА)";
+	oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, status);
 
-    oled.display();
+	// Строка 4: Статус Wi-Fi
+	String wifiStatus;
+	switch(wifiState) {
+	  case WiFiManager::WiFiState::CONNECTED: wifiStatus = "Подкл"; break;
+	  case WiFiManager::WiFiState::AP_MODE: wifiStatus = "Точка"; break;
+	  default: wifiStatus = "Откл";
+	}
+	oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, "WiFi: " + wifiStatus);
+
+	oled.display();
   }
 
   void updateTM1637(const DateTime& now, float temp) {
-    static bool showTemp = true;
-    
-    if(millis() - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
-      lastDisplayUpdate = millis();
-      
-      if(relay.getState()) {
-        if(showTemp) {
-          displayTemperature(temp);
-        } else {
-          displayTime(now);
-        }
-        showTemp = !showTemp;
-      } else {
-        displayNextScheduleTime(now);
-        showTemp = true;
-      }
-    }
+	static bool showTemp = true;
+	static unsigned long lastSwitch = 0;
+	
+	if(millis() - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
+	  lastDisplayUpdate = millis();
+	  
+	  if(relay.getState()) {
+		if(millis() - lastSwitch > 2000) {
+		  showTemp = !showTemp;
+		  lastSwitch = millis();
+		}
+		showTemp ? displayTemperature(temp) : displayShutdownTime(now);
+	  } else {
+		displayNextScheduleTime(now);
+	  }
+	}
   }
+
 
   void displayTime(const DateTime& now) {
     tmDisplay.showNumberDecEx(now.hour() * 100 + now.minute(), 0b01000000, true);
@@ -126,18 +155,23 @@ private:
   void displayTemperature(float temp) {
     int16_t tempInt = round(temp * 10);
     uint8_t data[4] = {
-      tempInt < 0 ? 0x40 : 0x00,
+      static_cast<uint8_t>(tempInt < 0 ? 0x40 : 0x00),
       tmDisplay.encodeDigit(abs(tempInt) / 100),
       tmDisplay.encodeDigit((abs(tempInt) / 10) % 10),
-      0x63 | (abs(tempInt) % 10 << 4)
+      static_cast<uint8_t>(0x63 | (abs(tempInt) % 10 << 4))
     };
     tmDisplay.setSegments(data);
   }
 
-  void displayNextScheduleTime(const DateTime& now) {
-    // Заглушка для отображения следующего времени включения
-    tmDisplay.showNumberDecEx(8888, 0b01000000, true);
-  }
+	void displayShutdownTime(const DateTime& now) {
+	  DateTime nextOff = scheduler->getNextShutdownTime(now);
+	  tmDisplay.showNumberDecEx(nextOff.hour() * 100 + nextOff.minute(), 0b01000000, true);
+	}
+
+	void displayNextScheduleTime(const DateTime& now) {
+	  DateTime nextOn = scheduler->getNextStartTime(now);
+	  tmDisplay.showNumberDecEx(nextOn.hour() * 100 + nextOn.minute(), 0b01000000, true);
+	}
 
 };
 

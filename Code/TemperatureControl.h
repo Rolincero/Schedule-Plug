@@ -23,13 +23,27 @@ public:
   }
 
   void update() {
-    static unsigned long lastUpdate = 0;
-    if(millis() - lastUpdate >= SENSOR_UPDATE_INTERVAL) {
-      sensors.requestTemperatures();
-      currentTemp = sensors.getTempCByIndex(0) + calibrationOffset;
-      checkProtection();
-      lastUpdate = millis();
-    }
+		static unsigned long lastUpdate = 0;
+		if(millis() - lastUpdate >= SENSOR_UPDATE_INTERVAL) {
+				sensors.requestTemperatures();
+				float rawTemp = sensors.getTempCByIndex(0);
+				
+				// Проверка ошибок
+				if(rawTemp == DEVICE_DISCONNECTED_C) {
+						relay.emergencyShutdown();
+						Serial.println("Sensor error!");
+						return;
+				}
+				
+				currentTemp = rawTemp + calibrationOffset;
+				checkProtection();
+				lastUpdate = millis();
+		}
+  }
+
+  void resetCalibration() {
+    calibrationOffset = 0.0;
+    saveCalibration();
   }
 
   float getTemperature() const { return currentTemp; }

@@ -1,42 +1,41 @@
+#include "MenuSystem.h"
 #include "RTCTimeManager.h"
-#include "WiFiManager.h"
-#include "DisplayManager.h"
 #include "RelayController.h"
-#include "TemperatureControl.h"
 #include "ScheduleManager.h"
+#include "DisplayManager.h"
+#include "TemperatureControl.h"
+#include "WiFiManager.h"
+#include "EncoderHandler.h"
 
+// Создаем все объекты
 RTCTimeManager timeManager;
 RelayController relay;
-TemperatureControl tempControl(relay);
 ScheduleManager scheduler(relay);
-DisplayManager display(relay);
-WiFiManager wifi;
+DisplayManager display(relay, scheduler);
+TemperatureControl tempControl(relay);
+WiFiManager wifi(timeManager, scheduler);
+EncoderHandler encoder;
+MenuSystem menu(display, encoder, timeManager, scheduler, wifi, tempControl);
 
 void setup() {
   Serial.begin(115200);
-  
-  // Инициализация модулей
   timeManager.init();
-  relay.setState(false);
+  relay = RelayController();
   tempControl.init();
-  scheduler.load();
   display.init();
-  wifi.init(&timeManager);
+  wifi.init();
+  encoder.init();
 }
 
 void loop() {
-  // Обновление модулей
   DateTime now = timeManager.getNow();
   tempControl.update();
   scheduler.checkSchedule(now);
   wifi.handleClient();
+  menu.update();
   
-  // Обновление дисплея
-  display.updateMainScreen(
-    now,
-    tempControl.getTemperature(),
-    tempControl.isOverheated()
-  );
+  display.drawMainScreen(now, tempControl.getTemperature(), 
+                       tempControl.isOverheated(), wifi.getState());
   
   delay(100);
 }
