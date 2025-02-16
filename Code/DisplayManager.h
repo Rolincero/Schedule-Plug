@@ -29,20 +29,6 @@ public:
     tmDisplay.setBrightness(7);
   }
 
-  void drawMainScreen(const DateTime& now, float temp, bool overheatStatus, WiFiManager::WiFiState wifiState) {
-    static String lastRenderedData;
-    String newData = String(now.dayOfTheWeek()) + 
-                    String(temp) + 
-                    String(relay.getState()) + 
-                    String(overheatStatus);
-    
-    if(newData != lastRenderedData) {
-      drawMainScreen(now, temp, overheatStatus);
-      lastRenderedData = newData;
-    }
-    updateTM1637(now, temp);
-  }
-
   void drawMenu(const char** items, int count, int selectedIndex) {
     oled.clear();
     oled.drawString(LEFT_PADDING, TOP_PADDING, "== Меню ==");
@@ -52,6 +38,40 @@ public:
       oled.drawString(LEFT_PADDING, TOP_PADDING + (i+1)*LINE_HEIGHT, text);
     }
     oled.display();
+  }
+
+  void drawMainScreen(const DateTime& now, float temp, bool overheatStatus, WiFiManager::WiFiState wifiState) {
+	oled.clear();
+	
+	// Строка 1: Время и день недели
+	char datetime[30];
+	snprintf(datetime, sizeof(datetime), "%02d:%02d:%02d %s", 
+			now.hour(), now.minute(), now.second(),
+			daysOfWeek[(now.dayOfTheWeek() + 6) % 7]); // Исправление индексации дней
+	oled.drawString(LEFT_PADDING, TOP_PADDING, datetime);
+
+	// Строка 2: Температура и статус
+	char tempStr[20];
+	snprintf(tempStr, sizeof(tempStr), "%.0fC %s", 
+			temp, 
+			overheatStatus ? "Перегрев" : "Норма");
+	oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tempStr);
+
+	// Строка 3: Состояние реле
+	String status = relay.getState() ? "АКТИВНО" : "ОЖИДАНИЕ";
+	if(relay.isBlocked()) status += " (БЛОКИРОВКА)";
+	oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, status);
+
+	// Строка 4: Статус Wi-Fi
+	String wifiStatus;
+	switch(wifiState) {
+	  case WiFiManager::WiFiState::CONNECTED: wifiStatus = "Подкл"; break;
+	  case WiFiManager::WiFiState::AP_MODE: wifiStatus = "Точка"; break;
+	  default: wifiStatus = "Откл";
+	}
+	oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, "WiFi: " + wifiStatus);
+
+	oled.display();
   }
 
   void showResetAnimation(float progress) {
@@ -93,40 +113,6 @@ private:
   static constexpr int LEFT_PADDING = 5;
   static constexpr unsigned long DISPLAY_UPDATE_INTERVAL = 2000;
   static const char* daysOfWeek[7];
-
-  void drawMainScreen(const DateTime& now, float temp, bool overheatStatus, WiFiManager::WiFiState wifiState) {
-	oled.clear();
-	
-	// Строка 1: Время и день недели
-	char datetime[30];
-	snprintf(datetime, sizeof(datetime), "%02d:%02d:%02d %s", 
-			now.hour(), now.minute(), now.second(),
-			daysOfWeek[(now.dayOfTheWeek() + 6) % 7]); // Исправление индексации дней
-	oled.drawString(LEFT_PADDING, TOP_PADDING, datetime);
-
-	// Строка 2: Температура и статус
-	char tempStr[20];
-	snprintf(tempStr, sizeof(tempStr), "%.0fC %s", 
-			temp, 
-			overheatStatus ? "Перегрев" : "Норма");
-	oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tempStr);
-
-	// Строка 3: Состояние реле
-	String status = relay.getState() ? "АКТИВНО" : "ОЖИДАНИЕ";
-	if(relay.isBlocked()) status += " (БЛОКИРОВКА)";
-	oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, status);
-
-	// Строка 4: Статус Wi-Fi
-	String wifiStatus;
-	switch(wifiState) {
-	  case WiFiManager::WiFiState::CONNECTED: wifiStatus = "Подкл"; break;
-	  case WiFiManager::WiFiState::AP_MODE: wifiStatus = "Точка"; break;
-	  default: wifiStatus = "Откл";
-	}
-	oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, "WiFi: " + wifiStatus);
-
-	oled.display();
-  }
 
   void updateTM1637(const DateTime& now, float temp) {
 	static bool showTemp = true;

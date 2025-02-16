@@ -25,15 +25,20 @@ public:
   }
 
   void syncTime() {
-    if (WiFi.status() == WL_CONNECTED) {
-      timeClient.begin();
-      if (timeClient.forceUpdate()) {
-        rtc.adjust(DateTime(timeClient.getEpochTime()));
-        needsSync = false;
-        Serial.println("NTP sync successful");
-      }
-    }
+	if (WiFi.status() == WL_CONNECTED) {
+	  timeClient.begin();
+	  if (timeClient.forceUpdate()) {
+		rtc.adjust(DateTime(timeClient.getEpochTime()));
+		needsSync = false;
+		Serial.println("NTP sync successful");
+	  } else {
+		Serial.println("NTP sync failed");
+	  }
+	} else {
+	  Serial.println("WiFi not connected, cannot sync time");
+	  }
   }
+
 
   DateTime getNow() {
     return rtc.now();

@@ -25,7 +25,6 @@ public:
   
   void handleClient() {
 	server.handleClient();
-	
 	if(state == WiFiState::CONNECTING && millis() - lastCheck > 10000) {
 	  checkConnection();
 	}
@@ -37,7 +36,7 @@ public:
 	prefs.remove("pass");
 	prefs.end();
 	WiFi.disconnect();
-  } 
+  }
   
   WiFiState getState() const {
 	return state;
@@ -47,7 +46,14 @@ public:
 	return WiFi.localIP().toString();
   }
   
-  private:
+  void loadCredentials() {
+	prefs.begin("wifi", true);
+	storedSSID = prefs.getString("ssid", "");
+	storedPass = prefs.getString("pass", "");
+	prefs.end();
+  }
+  
+private:
   WebServer server;
   RTCTimeManager& timeManager;
   ScheduleManager& scheduleManager;
@@ -58,122 +64,11 @@ public:
   String apPass = "configure123";
   String storedSSID;
   String storedPass;
-
+  
   void saveCredentials(const String& ssid, const String& pass) {
-    prefs.begin("wifi", false);
-    prefs.putString("ssid", ssid);
-    prefs.putString("pass", pass);
-    prefs.end();
-  }
-
-  void beginConnection() {
-    if(storedSSID.length() > 0) {
-      connectToWiFi(storedSSID.c_str(), storedPass.c_str());
-    } else {
-      startAPMode();
-    }
-  }
-
-  void connectToWiFi(const char* ssid, const char* pass) {
-    WiFi.begin(ssid, pass);
-    state = WiFiState::CONNECTING;
-    lastCheck = millis();
-    
-    server.on("/", [this]() { handleRoot(); });
-    server.on("/config", HTTP_GET, std::bind(&WiFiManager::handleConfig, this));
-    server.on("/schedule", HTTP_POST, std::bind(&WiFiManager::handleSchedule, this));
-    server.begin();
-  }
-
-  void startAPMode() {
-    WiFi.softAP(apSSID.c_str(), apPass.c_str());
-    state = WiFiState::AP_MODE;
-    
-    server.on("/", std::bind(&WiFiManager::handleAPRoot, this));
-    server.on("/save", HTTP_GET, std::bind(&WiFiManager::handleAPSave, this));
-    server.begin();
-  }
-
-  void checkConnection() {
-    if(WiFi.status() == WL_CONNECTED) {
-      state = WiFiState::CONNECTED;
-      if(timeManager.needsTimeSync()) {
-	      timeManager.syncTime();
-    } else {
-      WiFi.reconnect();
-    }
-    lastCheck = millis();
-  }
-
-  // HTTP Handlers
-  void handleRoot() {
-    server.send(200, "text/html", 
-      "<h1>Smart Plug</h1>"
-      "<a href='/config'>Settings</a>");
-  }
-
-  void handleConfig() {
-    server.send(200, "text/html",
-      "<form action='/save'>"
-      "SSID: <input name='ssid'><br>"
-      "Password: <input name='pass'><br>"
-      "<input type='submit'></form>");
-  }
-
-  void handleAPRoot() {
-    server.send(200, "text/html",
-      "<h1>WiFi Setup</h1>"
-      "<form action='/save'>"
-      "SSID: <input name='ssid'><br>"
-      "Password: <input name='pass'><br>"
-      "<input type='submit'></form>");
-  }
-
-  void handleAPSave() {
-    String ssid = server.arg("ssid");
-    String pass = server.arg("pass");
-    
-    if(ssid.length() > 0) {
-      saveCredentials(ssid, pass);
-      server.send(200, "text/plain", "Settings saved. Rebooting...");
-      delay(1000);
-      ESP.restart();
-    }
-  }
-
-  void handleSchedule() {
-  if(server.method() == HTTP_POST) {
-	bool success = true;
-	
-	for(int i = 0; i < 7; i++) {
-	  String dayKey = String(i);
-	  String startVal = server.arg("d" + dayKey + "s");
-	  String endVal = server.arg("d" + dayKey + "e");
-	  
-	  if(!startVal.isEmpty() && !endVal.isEmpty()) {
-		uint32_t start = startVal.toInt();
-		uint32_t end = endVal.toInt();
-		
-		// Базовая валидация
-		if(start > 86400 || end > 86400) {
-		  success = false;
-		  break;
-		}
-		
-		scheduleManager->weeklySchedule[i].start = start;
-		scheduleManager->weeklySchedule[i].end = end;
-	  }
-    scheduleManager.weeklySchedule[i].start = start; // Используем точку
-
-    if(success) {
-		scheduleManager.save();
-		server.send(200, "text/plain", "Schedule updated");
-	}
-
-    void loadCredentials() {
-	prefs.begin("wifi", true);
-	storedSSID = prefs.getString("ssid", "");
-	storedPass = prefs.getString("pass", "");
+	prefs.begin("wifi", false);
+	prefs.putString("ssid", ssid);
+	prefs.putString("pass", pass);
 	prefs.end();
   }
   
@@ -192,7 +87,29 @@ public:
 	
 	server.on("/", [this]() { handleRoot(); });
 	server.on("/config", HTTP_GET, [this]() { handleConfig(); });
+	server.on("/schedule", HTTP_POST, [this]() { handleSchedule(); });
 	server.begin();
+  }
+  
+  void startAPMode() {
+	WiFi.softAP(apSSID.c_str(), apPass.c_str());
+	state = WiFiState::AP_MODE;
+	
+	server.on("/", [this]() { handleAPRoot(); });
+	server.on("/save", HTTP_GET, [this]() { handleAPSave(); });
+	server.begin();
+  }
+  
+  void checkConnection() {
+	  if(WiFi.status() == WL_CONNECTED) {
+	    state = WiFiState::CONNECTED;
+	    if(timeManager.needsTimeSync()) {
+	  	timeManager.syncTime();
+	    }
+	  } else {
+	    WiFi.reconnect();
+	  }
+	  lastCheck = millis();
   }
   
   void handleRoot() {
@@ -208,8 +125,57 @@ public:
 				"Password: <input name='pass'><br>"
 				"<input type='submit'></form>");
   }
+  
+  void handleAPRoot() {
+	server.send(200, "text/html",
+				"<h1>WiFi Setup</h1>"
+				"<form action='/save'>"
+				"SSID: <input name='ssid'><br>"
+				"Password: <input name='pass'><br>"
+				"<input type='submit'></form>");
   }
+  
+  void handleAPSave() {
+	String ssid = server.arg("ssid");
+	String pass = server.arg("pass");
+	
+	if(ssid.length() > 0) {
+	  saveCredentials(ssid, pass);
+	  server.send(200, "text/plain", "Settings saved. Rebooting...");
+	  delay(1000);
+	  ESP.restart();
+	}
   }
-  }
+  
+  void handleSchedule() {
+	if(server.method() == HTTP_POST) {
+	  bool success = true;
+	  
+	  for(int i = 0; i < 7; i++) {
+		String dayKey = String(i);
+		String startVal = server.arg("d" + dayKey + "s");
+		String endVal = server.arg("d" + dayKey + "e");
+		
+		if(!startVal.isEmpty() && !endVal.isEmpty()) {
+		  uint32_t start = startVal.toInt();
+		  uint32_t end = endVal.toInt();
+		  
+		  if(start > 86400 || end > 86400) {
+			success = false;
+			break;
+		  }
+		  
+		  scheduleManager.weeklySchedule[i].start = start;
+		  scheduleManager.weeklySchedule[i].end = end;
+		}
+	  }
+	  
+	  if(success) {
+		scheduleManager.save();
+		server.send(200, "text/plain", "Schedule updated");
+	  } else {
+		server.send(400, "text/plain", "Invalid schedule data");
+	  }
+	}
   }
 };

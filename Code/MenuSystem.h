@@ -18,10 +18,10 @@ public:
     RESET_ANIMATION
   };
 
-  MenuSystem(DisplayManager& display, EncoderHandler& encoder, 
-            RTCTimeManager& rtc, ScheduleManager& schedule,
-            WiFiManager& wifi, TemperatureControl& temp)
-    : display(display), encoder(encoder), rtc(rtc),
+MenuSystem(DisplayManager& display, EncoderHandler& encoder, 
+		   RTCTimeManager& rtc, ScheduleManager& schedule,
+		   WiFiManager& wifi, TemperatureControl& temp)
+      : display(display), encoder(encoder), rtc(rtc),
       schedule(schedule), wifi(wifi), temp(temp) {}
 
   void update() {
@@ -31,8 +31,7 @@ public:
 
 private:
   DisplayManager& display;
-  Encoder ```cpp
-Handler& encoder;
+  EncoderHandler& encoder;
   RTCTimeManager& rtc;
   ScheduleManager& schedule;
   WiFiManager& wifi;
