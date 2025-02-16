@@ -25,6 +25,7 @@ void setup() {
   display.init();
   wifi.init();
   encoder.init();
+  digitalWrite(GPIO_CONTROL, LOW);
 }
 
 void loop() {

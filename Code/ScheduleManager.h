@@ -43,11 +43,12 @@ public:
     uint8_t currentDay = now.dayOfTheWeek() % 7;
     uint32_t currentTime = now.hour() * 3600 + now.minute() * 60 + now.second();
     
-		if(weeklySchedule[currentDay].start > 86400 || 
-				weeklySchedule[currentDay].end > 86400) {
-				relay.setState(false);
-		return false;
-		}
+    if(weeklySchedule[currentDay].start > 86400 || 
+      weeklySchedule[currentDay].end > 86400 ||
+      weeklySchedule[currentDay].start == weeklySchedule[currentDay].end) {
+      relay.setState(false);
+    return false;
+    }
 
     bool newState = false;
     Schedule daySchedule = weeklySchedule[currentDay];
