@@ -29,14 +29,12 @@ void setup() {
 }
 
 void loop() {
+  encoder.update();
   DateTime now = timeManager.getNow();
   tempControl.update();
   scheduler.checkSchedule(now);
   wifi.handleClient();
   menu.update();
-  
-  display.drawMainScreen(now, tempControl.getTemperature(), 
-                       tempControl.isOverheated(), wifi.getState());
   
   delay(100);
 }

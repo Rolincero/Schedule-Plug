@@ -41,11 +41,11 @@ private:
   int menuIndex = 0;
   unsigned long resetStartTime = 0;
   const char* mainMenuItems[5] = {
-    "Set Time",
-    "Set Schedule",
-    "Reset WiFi",
-    "Calibrate Temp",
-    "Exit"
+    "Настройка времени",
+    "Установка расписания",
+    "Сброс Wi-Fi",
+    "Калиб-ка температуры",
+    "Выход"
   };
 
   void handleEncoder() {
@@ -53,22 +53,28 @@ private:
     int delta = encoder.getDelta();
 
     switch(currentState) {
-      case MAIN_SCREEN:
-        if(action == EncoderHandler::SHORT_PRESS) {
-          currentState = MAIN_MENU;
-          menuIndex = 0;
-        }
-        break;
+    	case MAIN_SCREEN:
+    	  if(action == EncoderHandler::SHORT_PRESS) {
+    		currentState = MAIN_MENU;
+    		menuIndex = 0;
+    	  }
+    	  break;
 
       case MAIN_MENU:
         if(delta != 0) {
           menuIndex = constrain(menuIndex + delta, 0, 4);
+          // Добавить принудительное обновление
+          display.drawMenu(mainMenuItems, 5, menuIndex);
         }
         if(action == EncoderHandler::SHORT_PRESS) {
           handleMenuSelection();
         }
         if(action == EncoderHandler::LONG_PRESS) {
           currentState = MAIN_SCREEN;
+          // Добавить обновление главного экрана
+          DateTime now = rtc.getNow();
+          display.drawMainScreen(now, temp.getTemperature(), 
+                              temp.isOverheated(), wifi.getState());
         }
         break;
 
@@ -97,12 +103,11 @@ private:
           DateTime now = rtc.getNow();
           display.drawMainScreen(now, temp.getTemperature(), 
                               temp.isOverheated(), wifi.getState());
-        break;
+          break;
       }
-
       case MAIN_MENU:
-        display.drawMenu(mainMenuItems, 5, menuIndex);
-        break;
+          display.drawMenu(mainMenuItems, 5, menuIndex);
+          break;
 
       case RESET_ANIMATION:
         drawResetAnimation();

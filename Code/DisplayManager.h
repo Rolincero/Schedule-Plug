@@ -31,7 +31,7 @@ public:
 
   void drawMenu(const char** items, int count, int selectedIndex) {
     oled.clear();
-    oled.drawString(LEFT_PADDING, TOP_PADDING, "== Меню ==");
+    oled.drawString(LEFT_PADDING, TOP_PADDING, "======= Меню =======");
     
     for(int i = 0; i < count; i++) {
       String text = (i == selectedIndex) ? "> " + String(items[i]) : String(items[i]);
@@ -65,9 +65,9 @@ public:
 	// Строка 4: Статус Wi-Fi
 	String wifiStatus;
 	switch(wifiState) {
-	  case WiFiManager::WiFiState::CONNECTED: wifiStatus = "Подкл"; break;
-	  case WiFiManager::WiFiState::AP_MODE: wifiStatus = "Точка"; break;
-	  default: wifiStatus = "Откл";
+	  case WiFiManager::WiFiState::CONNECTED: wifiStatus = "Подключен"; break;
+	  case WiFiManager::WiFiState::AP_MODE: wifiStatus = "Точка доступа"; break;
+	  default: wifiStatus = "Отключен";
 	}
 	oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, "WiFi: " + wifiStatus);
 
