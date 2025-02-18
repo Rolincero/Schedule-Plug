@@ -210,6 +210,14 @@ public:
 	  oled.display();
   }
 
+	void drawAPInfoScreen(const String& ssid, const String& pass, const String& ip) {
+		oled.clear();
+		oled.drawString(0, 0, "SSID: " + ssid);
+		oled.drawString(0, 12, "Pass: " + pass);
+		oled.drawString(0, 24, "IP: " + ip);
+		oled.display();
+	}
+
   void showResetAnimation(float progress) {
 	  oled.clear();
 	

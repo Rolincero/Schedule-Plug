@@ -17,6 +17,7 @@ public:
     TIME_SETUP,
     SCHEDULE_SETUP,
     WIFI_RESET,
+    AP_INFO,
     TEMP_CALIBRATION,
     RESET_ANIMATION
   };
@@ -56,7 +57,7 @@ private:
   const char* mainMenuItems[5] = {
     "Настройка времени",
     "Установка расписания",
-    "Сброс Wi-Fi",
+    "Сброс\инфо Wi-Fi",
     "Калиб-ка температуры",
     "Выход"
   };
@@ -66,11 +67,21 @@ private:
     int delta = encoder.getDelta();
 
     switch(currentState) {
-		  case MAIN_SCREEN:
+			case MAIN_SCREEN:
+				if (action == EncoderHandler::SHORT_PRESS) {
+					// Переход в главное меню вместо прямого выбора пункта
+					currentState = MAIN_MENU;
+					menuIndex = 0; // Сброс индекса
+					visibleStartIndex = 0; // Сброс позиции скролла
+				}
+			break;
+
 			if(action == EncoderHandler::SHORT_PRESS) {
-			  currentState = MAIN_MENU;
-			  menuIndex = 0;
-			  visibleStartIndex = 0;
+				if (menuIndex == 2 && wifi.getState() == WiFiManager::WiFiState::AP_MODE) {
+					  currentState = AP_INFO; // Переход к информации AP
+				} else {
+					  handleMenuSelection();
+					}
 			}
 			break;
 			
@@ -87,14 +98,8 @@ private:
 			  display.drawMenu(mainMenuItems + visibleStartIndex, visibleItemsCount, menuIndex - visibleStartIndex);
 			}
 			if(action == EncoderHandler::SHORT_PRESS) {
-			  if (menuIndex == 0) { // Настройка времени
-				currentState = TIME_SETUP;
-				editingTime = rtc.getNow(); // Начинаем редактирование с текущего времени
-				currentEditField = EDIT_YEAR; // Начинаем с года
-			  } else {
 				handleMenuSelection();
 			  }
-			}
 			if(action == EncoderHandler::LONG_PRESS) {
 			  currentState = MAIN_SCREEN;
 			  DateTime now = rtc.getNow();
@@ -181,6 +186,12 @@ private:
 			}
 			break;
 
+    case AP_INFO:
+			if (action == EncoderHandler::SHORT_PRESS) {
+				currentState = MAIN_MENU; // Возврат в меню
+			}
+		break;
+
       // Обработка других состояний...
     }
 
@@ -214,6 +225,10 @@ private:
 				  currentTempField
 			  );
 	    break;
+      
+			case AP_INFO:
+				display.drawAPInfoScreen(wifi.getAPSSID(), wifi.getAPPassword(), wifi.getAPIP());
+			break;
 			
 		  case RESET_ANIMATION:
 			drawResetAnimation();
@@ -231,7 +246,13 @@ private:
     switch(menuIndex) {
       case 0: currentState = TIME_SETUP; break;
       case 1: currentState = SCHEDULE_SETUP; break;
-      case 2: resetWiFi(); break;
+			case 2: 
+				if (wifi.getState() == WiFiManager::WiFiState::AP_MODE) {
+					currentState = AP_INFO;
+				} else {
+					resetWiFi();
+				}
+			break;
       case 3: // Калибровка температуры
 	      currentState = TEMP_CALIBRATION;
 	      currentOffset = temp.getCalibrationOffset();
