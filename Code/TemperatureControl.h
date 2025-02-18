@@ -46,9 +46,28 @@ public:
     saveCalibration();
   }
 
+  float getRawTemperature() { 
+    return sensors.getTempCByIndex(0);
+  }
+
+
+  float getTemperature() { // С калибровкой
+    return getRawTemperature() + calibrationOffset;
+  }
+
+	void setCalibration(float offset) {
+	  calibrationOffset = offset;
+	  saveCalibration();
+	}
+	
+	float getCalibrationOffset() const {
+	  return calibrationOffset;
+	}
+  
+	
+
   float getTemperature() const { return currentTemp; }
   bool isOverheated() const { return overheatStatus; }
-  void setCalibration(float offset) { calibrationOffset = offset; saveCalibration(); }
   float getCalibration() const { return calibrationOffset; }
 
 private:

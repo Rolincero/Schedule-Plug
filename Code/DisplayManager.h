@@ -9,6 +9,7 @@
 #include "Pins.h"
 #include "fontsRus.h"
 #include "TimeEditField.h"
+#include "TempEditField.h"
 
 
 class MenuSystem;
@@ -76,6 +77,45 @@ public:
 	
 	oled.display();
   }
+
+	void drawTemperatureCalibrationScreen(
+	  float currentTemp, 
+	  float calibratedTemp, 
+	  float calibrationOffset,
+	  TempEditField currentField
+	  ) {
+
+    oled.clear();
+	  
+	  // Заголовок
+	  oled.drawString(LEFT_PADDING, TOP_PADDING, "=Кал-ка температуры=");
+	  
+	  // Исходное значение
+	  char currentTempStr[40];
+	  snprintf(currentTempStr, sizeof(currentTempStr), "Ист значение: %.1f", currentTemp);
+	  if(currentField == EDIT_SOURCE) {
+		drawUnderlinedText(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, currentTempStr);
+	  } else {
+		oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, currentTempStr);
+	  }
+	  
+	  // Совмещенное значение
+	  char calibratedTempStr[40];
+	  snprintf(calibratedTempStr, sizeof(calibratedTempStr), "Совм значение: %.1f", calibratedTemp);
+	  oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, calibratedTempStr);
+	  
+	  // Смещение
+	  char offsetStr[40];
+	  snprintf(offsetStr, sizeof(offsetStr), "Знач смещения: %.1f", calibrationOffset);
+	  if(currentField == EDIT_OFFSET) {
+		drawUnderlinedText(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, offsetStr);
+	  } else {
+		oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, offsetStr);
+	  }
+	  
+	  // Обязательное обновление дисплея
+	  oled.display();
+	}
   
 	void drawTimeSetupScreen(const DateTime& time, TimeEditField currentField) {
 	  oled.clear();
@@ -96,7 +136,7 @@ public:
 	  String timeString = String(timeStr);
 	  
 	  // Подсказка
-	  String hint = (currentField == EDIT_CONFIRM) ? "ОК - Сохранить" : "Настройка...";
+	  String hint = (currentField == EDIT_CONFIRM) ? "ЗАЖАТЬ - Сохранить" : "Настройка...";
 	  
 	  // Отрисовка даты с подчеркиванием выбранного поля
 	  int dateX = LEFT_PADDING;
@@ -198,13 +238,9 @@ public:
   }
 
 	void drawUnderlinedText(int x, int y, const String& text) {
-	  // Рисуем текст
 	  oled.drawString(x, y, text);
-	  
-	  // Рисуем линию под текстом
-	  int textWidth = oled.getStringWidth(text); // Ширина текста
-	  int underlineY = y + 10; // Позиция линии под текстом (10 пикселей ниже текста)
-	  oled.drawLine(x, underlineY, x + textWidth, underlineY);
+	  int width = oled.getStringWidth(text);
+	  oled.drawLine(x, y + 10, x + width, y + 10);
 	}
 
 private:

@@ -33,6 +33,11 @@ MenuSystem(DisplayManager& display, EncoderHandler& encoder,
   }
 
 private:
+
+  float currentOffset = 0.0;
+  float calibrationSource = 0.0;
+  TempEditField currentTempField = EDIT_OFFSET;
+
   DateTime editingTime; // Временная переменная для редактирования времени
   TimeEditField currentEditField = EDIT_YEAR; 
   
@@ -97,6 +102,36 @@ private:
 									temp.isOverheated(), wifi.getState());
 			}
 			break;
+
+			case TEMP_CALIBRATION:
+			  if (action == EncoderHandler::SHORT_PRESS) {
+				// Переключение между полями редактирования
+				currentTempField = (currentTempField == EDIT_SOURCE) 
+				? EDIT_OFFSET 
+				: EDIT_SOURCE;
+			  }
+			  
+			  if (action == EncoderHandler::LONG_PRESS) {
+				// Сохранение калибровки
+				temp.setCalibration(currentOffset);
+				currentState = MAIN_SCREEN;
+			  }
+			  
+			  if (delta != 0) {
+				float step = delta * 0.5f;
+				if (currentTempField == EDIT_OFFSET) { // Только смещение!
+				  currentOffset += step;
+				}
+				
+				// Явный вызов обновления дисплея
+				display.drawTemperatureCalibrationScreen(
+				  calibrationSource,
+				  calibrationSource + currentOffset,
+				  currentOffset,
+				  currentTempField
+				);
+			  }
+			  break;
 			
 		  case TIME_SETUP:
 			if (action == EncoderHandler::SHORT_PRESS) {
@@ -141,7 +176,8 @@ private:
 				case EDIT_CONFIRM:
 				  // Ничего не делаем, ждем LONG_PRESS для сохранения
 				  break;
-			  }
+        }
+
 			}
 			break;
 
@@ -169,6 +205,15 @@ private:
 		  case TIME_SETUP:
 			display.drawTimeSetupScreen(editingTime, currentEditField);
 			break;
+
+      case TEMP_CALIBRATION:
+			  display.drawTemperatureCalibrationScreen(
+				  calibrationSource,       // Локальная переменная
+				  calibrationSource + currentOffset,
+				  currentOffset,
+				  currentTempField
+			  );
+	    break;
 			
 		  case RESET_ANIMATION:
 			drawResetAnimation();
@@ -187,7 +232,11 @@ private:
       case 0: currentState = TIME_SETUP; break;
       case 1: currentState = SCHEDULE_SETUP; break;
       case 2: resetWiFi(); break;
-      case 3: currentState = TEMP_CALIBRATION; break;
+      case 3: // Калибровка температуры
+	      currentState = TEMP_CALIBRATION;
+	      currentOffset = temp.getCalibrationOffset();
+	      calibrationSource = temp.getRawTemperature() - currentOffset;
+	    break;
       case 4: currentState = MAIN_SCREEN; break;
     }
   }
