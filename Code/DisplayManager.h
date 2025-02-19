@@ -144,14 +144,14 @@ public:
 	  String timeString = String(timeStr);
 	  
 	  // Подсказка
-	  String hint = (currentField == EDIT_CONFIRM) ? "ЗАЖАТЬ - Сохранить" : "Настройка...";
+	  String hint = (currentField == TIME_EDIT_CONFIRM) ? "ЗАЖАТЬ - Сохранить" : "Настройка...";
 	  
 	  // Отрисовка даты с подчеркиванием выбранного поля
 	  int dateX = LEFT_PADDING;
 	  int dateY = TOP_PADDING + LINE_HEIGHT;
 	  
 	  // День
-	  if (currentField == EDIT_DAY) {
+	  if (currentField == TIME_EDIT_DAY) {
 		drawUnderlinedText(dateX, dateY, dateString.substring(0, 2));
 	  } else {
 		oled.drawString(dateX, dateY, dateString.substring(0, 2));
@@ -161,7 +161,7 @@ public:
 	  oled.drawString(dateX + 2 * 6, dateY, ".");
 	  
 	  // Месяц
-	  if (currentField == EDIT_MONTH) {
+	  if (currentField == TIME_EDIT_MONTH) {
 		drawUnderlinedText(dateX + 3 * 6, dateY, dateString.substring(3, 5));
 	  } else {
 		oled.drawString(dateX + 3 * 6, dateY, dateString.substring(3, 5));
@@ -171,7 +171,7 @@ public:
 	  oled.drawString(dateX + 5 * 6, dateY, ".");
 	  
 	  // Год
-	  if (currentField == EDIT_YEAR) {
+	  if (currentField == TIME_EDIT_YEAR) {
 		drawUnderlinedText(dateX + 6 * 6, dateY, dateString.substring(6, 10));
 	  } else {
 		oled.drawString(dateX + 6 * 6, dateY, dateString.substring(6, 10));
@@ -182,7 +182,7 @@ public:
 	  int timeY = TOP_PADDING + 2 * LINE_HEIGHT;
 	  
 	  // Часы
-	  if (currentField == EDIT_HOUR) {
+	  if (currentField == TIME_EDIT_HOUR) {
 		drawUnderlinedText(timeX, timeY, timeString.substring(0, 2));
 	  } else {
 		oled.drawString(timeX, timeY, timeString.substring(0, 2));
@@ -192,7 +192,7 @@ public:
 	  oled.drawString(timeX + 2 * 6, timeY, ":");
 	  
 	  // Минуты
-	  if (currentField == EDIT_MINUTE) {
+	  if (currentField == TIME_EDIT_MINUTE) {
 		drawUnderlinedText(timeX + 3 * 6, timeY, timeString.substring(3, 5));
 	  } else {
 		oled.drawString(timeX + 3 * 6, timeY, timeString.substring(3, 5));
@@ -202,14 +202,14 @@ public:
 	  oled.drawString(timeX + 5 * 6, timeY, ":");
 	  
 	  // Секунды
-	  if (currentField == EDIT_SECOND) {
+	  if (currentField == TIME_EDIT_SECOND) {
 		drawUnderlinedText(timeX + 6 * 6, timeY, timeString.substring(6, 8));
 	  } else {
 		oled.drawString(timeX + 6 * 6, timeY, timeString.substring(6, 8));
 	  }
 	  
 	  // Подсказка
-	  if (currentField == EDIT_CONFIRM) {
+	  if (currentField == TIME_EDIT_CONFIRM) {
 		drawUnderlinedText(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, hint);
 	  } else {
 		oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, hint);
@@ -247,6 +247,52 @@ public:
     oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, hint);
   
     oled.display();
+  }
+
+  void drawScheduleSetupScreen(
+	  uint8_t day,
+	  uint32_t start,
+	  uint32_t stop,
+	  int acceleration,
+	  ScheduleEditField field ) {
+	  oled.clear();
+  
+	  // Заголовок
+	  oled.drawString(LEFT_PADDING, TOP_PADDING, "Настройка расписания");
+  
+	  // День недели
+	  String dayStr = "День: " + String(daysOfWeek[day]);
+	  if(field == SCHEDULE_EDIT_DAY) {
+	  	drawUnderlinedText(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, dayStr);
+	  } else {
+	  	oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, dayStr);
+	  }
+  
+	  // Время старта
+	  char startStr[30];
+	  TimeSpan tsStart(start);
+	  snprintf(startStr, sizeof(startStr), "%sСтарт: %02d:%02d", 
+	  		 field == SCHEDULE_EDIT_START ? "> " : "  ",
+	  		 tsStart.hours(), 
+	  		 tsStart.minutes());
+	  oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, startStr);
+  
+	  // Время стопа
+	  char stopStr[30];
+	  TimeSpan tsStop(stop);
+	  snprintf(stopStr, sizeof(stopStr), "%sСтоп: %02d:%02d", 
+	  		 field == SCHEDULE_EDIT_STOP ? "> " : "  ",
+	  		 tsStop.hours(), 
+	  		 tsStop.minutes());
+	  oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, stopStr);
+  
+	  // Ускорение
+	  char accelStr[30];
+	  snprintf(accelStr, sizeof(accelStr), "Ускорение: %d мин", 
+	  		 map(acceleration, 1, 6, 1, 30));
+	  oled.drawString(LEFT_PADDING, TOP_PADDING + 4*LINE_HEIGHT, accelStr);
+  
+	  oled.display();
   }
 
   void showResetAnimation(float progress) {

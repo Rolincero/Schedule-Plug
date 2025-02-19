@@ -41,9 +41,15 @@ private:
   TempEditField currentTempField = EDIT_OFFSET;
   int timezoneOffset = 3;
   bool editingTimezone = false;
+  ScheduleEditField currentScheduleField = SCHEDULE_EDIT_DAY;
+	uint8_t currentDay = 0;
+	uint32_t startTime = 0;
+	uint32_t stopTime = 0;
+	int acceleration = 0;
+	unsigned long lastEncoderMove = 0;
 
   DateTime editingTime; // Временная переменная для редактирования времени
-  TimeEditField currentEditField = EDIT_YEAR; 
+  TimeEditField currentEditField = TIME_EDIT_YEAR; 
   
   int visibleStartIndex = 0; // Начальный индекс видимого диапазона
   const int visibleItemsCount = 4; // Количество видимых пунктов меню
@@ -60,7 +66,7 @@ private:
   const char* mainMenuItems[6] = {
     "Настройка времени",
     "Установка расписания",
-    "Сброс|инфо Wi-Fi",
+    "Сброс-инфо Wi-Fi",
     "Калиб-ка температуры",
     "Часовой пояс",
     "Выход"
@@ -128,7 +134,7 @@ private:
 			  
 			  if (delta != 0) {
 				float step = delta * 0.5f;
-				if (currentTempField == EDIT_OFFSET) { // Только смещение!
+				if (currentTempField == EDIT_OFFSET) { 
 				  currentOffset += step;
 				}
 				
@@ -145,7 +151,7 @@ private:
 		  case TIME_SETUP:
 			if (action == EncoderHandler::SHORT_PRESS) {
 			  // Переход к следующему полю
-			  currentEditField = static_cast<TimeEditField>((currentEditField + 1) % (EDIT_CONFIRM + 1));
+			  currentEditField = static_cast<TimeEditField>((currentEditField + 1) % (TIME_EDIT_CONFIRM + 1));
 			}
 			if (action == EncoderHandler::LONG_PRESS) {
 			  // Сохраняем время и выходим из режима настройки
@@ -158,31 +164,31 @@ private:
 			if (delta != 0) {
 			  // Редактирование текущего поля
 			  switch (currentEditField) {
-				case EDIT_YEAR:
+				case TIME_EDIT_YEAR:
 				  editingTime = DateTime(editingTime.year() + delta, editingTime.month(), editingTime.day(),
 										editingTime.hour(), editingTime.minute(), editingTime.second());
 				  break;
-				case EDIT_MONTH:
+				case TIME_EDIT_MONTH:
 				  editingTime = DateTime(editingTime.year(), constrain(editingTime.month() + delta, 1, 12), editingTime.day(),
 										editingTime.hour(), editingTime.minute(), editingTime.second());
 				  break;
-				case EDIT_DAY:
+				case TIME_EDIT_DAY:
 				  editingTime = DateTime(editingTime.year(), editingTime.month(), constrain(editingTime.day() + delta, 1, 31),
 										editingTime.hour(), editingTime.minute(), editingTime.second());
 				  break;
-				case EDIT_HOUR:
+				case TIME_EDIT_HOUR:
 				  editingTime = DateTime(editingTime.year(), editingTime.month(), editingTime.day(),
 										constrain(editingTime.hour() + delta, 0, 23), editingTime.minute(), editingTime.second());
 				  break;
-				case EDIT_MINUTE:
+				case TIME_EDIT_MINUTE:
 				  editingTime = DateTime(editingTime.year(), editingTime.month(), editingTime.day(),
 										editingTime.hour(), constrain(editingTime.minute() + delta, 0, 59), editingTime.second());
 				  break;
-				case EDIT_SECOND:
+				case TIME_EDIT_SECOND:
 				  editingTime = DateTime(editingTime.year(), editingTime.month(), editingTime.day(),
 										editingTime.hour(), editingTime.minute(), constrain(editingTime.second() + delta, 0, 59));
 				  break;
-				case EDIT_CONFIRM:
+				case TIME_EDIT_CONFIRM:
 				  // Ничего не делаем, ждем LONG_PRESS для сохранения
 				  break;
         }
@@ -206,6 +212,14 @@ private:
 				
 				if(editingTimezone && delta != 0) {
 					timezoneOffset = constrain(timezoneOffset + delta, -12, 14);
+				}
+			break;
+
+      case SCHEDULE_SETUP:
+				handleScheduleSetup(delta, action);
+				if (action == EncoderHandler::LONG_PRESS) {
+					saveDaySchedule();
+					currentState = MAIN_SCREEN;
 				}
 			break;
 
@@ -250,6 +264,16 @@ private:
       case TIMEZONE_SETUP:
 	      display.drawTimezoneSetupScreen(timezoneOffset, editingTimezone);
 	    break;
+
+      case SCHEDULE_SETUP:
+				display.drawScheduleSetupScreen(
+					currentDay,
+					startTime,
+					stopTime,
+					acceleration,
+					currentScheduleField
+				);
+			break;
 			
 		  case RESET_ANIMATION:
 			drawResetAnimation();
@@ -283,6 +307,52 @@ private:
 			case 5: currentState = MAIN_SCREEN; break;
     }
   }
+
+  void handleScheduleSetup(int delta, EncoderHandler::ButtonAction action) {
+	  if (action == EncoderHandler::SHORT_PRESS) {
+	  	currentScheduleField = static_cast<ScheduleEditField>((currentScheduleField + 1) % 4);
+	  }
+  
+	  if (delta != 0) {
+	  	handleScheduleValueChange(delta);
+	  }
+  }
+
+  void handleScheduleValueChange(int delta) {
+		unsigned long now = millis();
+		if (now - lastEncoderMove > 300) acceleration = 0;
+		acceleration = constrain(acceleration + abs(delta), 1, 6);
+		lastEncoderMove = now;
+		
+		int multiplier = map(acceleration, 1, 6, 1, 30);
+		int step = delta * multiplier * 60; // Шаг в секундах
+		
+		switch (currentScheduleField) {
+			case SCHEDULE_EDIT_DAY:
+				currentDay = (currentDay + delta + 7) % 7;
+				loadDaySchedule();
+				break;
+				
+			case SCHEDULE_EDIT_START:
+				startTime = constrain(startTime + step, 0, 86399);
+				break;
+				
+			case SCHEDULE_EDIT_STOP:
+				stopTime = constrain(stopTime + step, 0, 86399);
+				break;
+		}
+	}
+
+  void loadDaySchedule() {
+		startTime = schedule.weeklySchedule[currentDay].start;
+		stopTime = schedule.weeklySchedule[currentDay].end;
+	}
+	
+	void saveDaySchedule() {
+		schedule.weeklySchedule[currentDay].start = startTime;
+		schedule.weeklySchedule[currentDay].end = stopTime;
+		schedule.save();
+	}
 
   void resetWiFi() {
     wifi.resetCredentials();
