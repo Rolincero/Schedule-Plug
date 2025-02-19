@@ -11,7 +11,7 @@
 RTCTimeManager timeManager;
 RelayController relay;
 ScheduleManager scheduler(relay);
-DisplayManager display(relay, scheduler);
+DisplayManager display(relay, scheduler, timeManager);
 TemperatureControl tempControl(relay);
 WiFiManager wifi(timeManager, scheduler);
 EncoderHandler encoder;

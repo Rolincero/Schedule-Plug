@@ -11,6 +11,9 @@
 #include "TimeEditField.h"
 #include "TempEditField.h"
 
+class RelayController;
+class ScheduleManager;
+class RTCTimeManager;
 
 class MenuSystem;
 
@@ -18,8 +21,11 @@ class DisplayManager {
 public:
   ScheduleManager* scheduler = nullptr;
   
-  DisplayManager(RelayController& relay, ScheduleManager& sched) 
-  : relay(relay), scheduler(&sched) {}
+	DisplayManager(
+		RelayController& relay, 
+		ScheduleManager& sched,
+		RTCTimeManager& tm  // Добавить параметр
+	) : relay(relay), scheduler(&sched), timeManager(tm) {}
   
 	void init() {
 		if(!oled.init()) {
@@ -49,9 +55,11 @@ public:
 	
 	// Строка 1: Время и день недели
 	char datetime[30];
-	snprintf(datetime, sizeof(datetime), "%02d:%02d:%02d %s", 
-			 now.hour(), now.minute(), now.second(),
-			 daysOfWeek[(now.dayOfTheWeek() + 6) % 7]); // Исправление индексации дней
+  int tzOffset = this->timeManager.getTimezoneOffset();
+	snprintf(datetime, sizeof(datetime), "%02d:%02d:%02d %s (UTC%+d)", 
+			now.hour(), now.minute(), now.second(),
+			daysOfWeek[(now.dayOfTheWeek() + 6) % 7],
+			tzOffset);
 	oled.drawString(LEFT_PADDING, TOP_PADDING, datetime);
 	
 	// Строка 2: Температура и статус
@@ -218,6 +226,29 @@ public:
 		oled.display();
 	}
 
+  void drawTimezoneSetupScreen(int currentOffset, bool editing) {
+    oled.clear();
+    
+    // Заголовок
+    oled.drawString(LEFT_PADDING, TOP_PADDING, "== Часовой пояс ==");
+  
+    // Текущее смещение
+    char tzStr[30];
+    snprintf(tzStr, sizeof(tzStr), "Смещение: UTC%+d", currentOffset);
+    
+    if(editing) {
+      drawUnderlinedText(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tzStr);
+    } else {
+      oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tzStr);
+    }
+  
+    // Подсказка
+    String hint = editing ? "Вращайте энкодер" : "Нажмите для редакт.";
+    oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, hint);
+  
+    oled.display();
+  }
+
   void showResetAnimation(float progress) {
 	  oled.clear();
 	
@@ -255,8 +286,11 @@ private:
   SSD1306Wire oled{0x3c, I2C_SDA, I2C_SCL};
   TM1637Display tmDisplay{TM1637_CLK, TM1637_DIO};
   RelayController& relay;
+  RTCTimeManager& timeManager;
+  
   bool displayToggle = false;
   unsigned long lastDisplayUpdate = 0;
+  
   
   static constexpr int LINE_HEIGHT = 12;
   static constexpr int TOP_PADDING = 5;

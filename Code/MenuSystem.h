@@ -19,6 +19,7 @@ public:
     WIFI_RESET,
     AP_INFO,
     TEMP_CALIBRATION,
+    TIMEZONE_SETUP,
     RESET_ANIMATION
   };
 
@@ -38,6 +39,8 @@ private:
   float currentOffset = 0.0;
   float calibrationSource = 0.0;
   TempEditField currentTempField = EDIT_OFFSET;
+  int timezoneOffset = 3;
+  bool editingTimezone = false;
 
   DateTime editingTime; // Временная переменная для редактирования времени
   TimeEditField currentEditField = EDIT_YEAR; 
@@ -54,11 +57,12 @@ private:
   State currentState = MAIN_SCREEN;
   int menuIndex = 0;
   unsigned long resetStartTime = 0;
-  const char* mainMenuItems[5] = {
+  const char* mainMenuItems[6] = {
     "Настройка времени",
     "Установка расписания",
-    "Сброс\инфо Wi-Fi",
+    "Сброс|инфо Wi-Fi",
     "Калиб-ка температуры",
+    "Часовой пояс",
     "Выход"
   };
 
@@ -87,14 +91,14 @@ private:
 			
 		  case MAIN_MENU:
 			if(delta != 0) {
-			  menuIndex = constrain(menuIndex + delta, 0, 4);
-			  if(menuIndex > visibleStartIndex + visibleItemsCount - 1) {
-				visibleStartIndex++;
-			  }
-			  if(menuIndex < visibleStartIndex) {
-				visibleStartIndex--;
-			  }
-			  visibleStartIndex = constrain(visibleStartIndex, 0, 5 - visibleItemsCount);
+			  menuIndex = constrain(menuIndex + delta, 0, 5);
+				if(menuIndex >= visibleStartIndex + visibleItemsCount) {
+					visibleStartIndex = menuIndex - visibleItemsCount + 1;
+				}
+				if(menuIndex < visibleStartIndex) {
+					visibleStartIndex = menuIndex;
+				}
+			  visibleStartIndex = constrain(visibleStartIndex, 0, 6 - visibleItemsCount);
 			  display.drawMenu(mainMenuItems + visibleStartIndex, visibleItemsCount, menuIndex - visibleStartIndex);
 			}
 			if(action == EncoderHandler::SHORT_PRESS) {
@@ -186,11 +190,24 @@ private:
 			}
 			break;
 
-    case AP_INFO:
-			if (action == EncoderHandler::SHORT_PRESS) {
-				currentState = MAIN_MENU; // Возврат в меню
-			}
-		break;
+      case AP_INFO:
+			  if (action == EncoderHandler::SHORT_PRESS) {
+			  	currentState = MAIN_MENU; // Возврат в меню
+			  }
+		  break;
+
+      case TIMEZONE_SETUP:
+				if(action == EncoderHandler::SHORT_PRESS) {
+					editingTimezone = !editingTimezone;
+					if(!editingTimezone) {
+						rtc.setTimezoneOffset(timezoneOffset);
+					}
+				}
+				
+				if(editingTimezone && delta != 0) {
+					timezoneOffset = constrain(timezoneOffset + delta, -12, 14);
+				}
+			break;
 
       // Обработка других состояний...
     }
@@ -229,6 +246,10 @@ private:
 			case AP_INFO:
 				display.drawAPInfoScreen(wifi.getAPSSID(), wifi.getAPPassword(), wifi.getAPIP());
 			break;
+
+      case TIMEZONE_SETUP:
+	      display.drawTimezoneSetupScreen(timezoneOffset, editingTimezone);
+	    break;
 			
 		  case RESET_ANIMATION:
 			drawResetAnimation();
@@ -258,7 +279,8 @@ private:
 	      currentOffset = temp.getCalibrationOffset();
 	      calibrationSource = temp.getRawTemperature() - currentOffset;
 	    break;
-      case 4: currentState = MAIN_SCREEN; break;
+			case 4: currentState = TIMEZONE_SETUP; break;
+			case 5: currentState = MAIN_SCREEN; break;
     }
   }
 
