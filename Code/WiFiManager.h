@@ -196,6 +196,11 @@ private:
             success = false;
             break;
           }
+
+          if(success) {
+			      scheduleManager.save(); // Убедиться, что есть вызов save()
+			      server.send(200, "text/plain", "Schedule updated");
+		      }
           
           scheduleManager.weeklySchedule[i].start = start;
           scheduleManager.weeklySchedule[i].end = end;

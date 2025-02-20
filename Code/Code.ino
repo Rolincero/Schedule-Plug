@@ -18,14 +18,16 @@ EncoderHandler encoder;
 MenuSystem menu(display, encoder, timeManager, scheduler, wifi, tempControl);
 
 void setup() {
-  Serial.begin(115200);
-  timeManager.init();
-  relay = RelayController();
-  tempControl.init();
-  display.init();
-  wifi.init();
-  encoder.init();
-  digitalWrite(GPIO_CONTROL, LOW);
+	Serial.begin(115200);
+	timeManager.init();
+  timeManager.syncTime();
+	relay = RelayController();
+	tempControl.init();
+	display.init();
+	wifi.init();
+	encoder.init();
+	digitalWrite(GPIO_CONTROL, LOW);
+	scheduler.load();
 }
 
 void loop() {

@@ -341,6 +341,7 @@ private:
 				stopTime = constrain(stopTime + step, 0, 86399);
 				break;
 		}
+    saveDaySchedule();
 	}
 
   void loadDaySchedule() {
@@ -352,6 +353,9 @@ private:
 		schedule.weeklySchedule[currentDay].start = startTime;
 		schedule.weeklySchedule[currentDay].end = stopTime;
 		schedule.save();
+
+    DateTime now = rtc.getNow();
+	  schedule.forceScheduleCheck(now);
 	}
 
   void resetWiFi() {

@@ -12,14 +12,17 @@ public:
 
   ScheduleManager(RelayController& relay) : relay(relay) {}
 
-  void load() {
-    prefs.begin("schedule", true);
-    for(int i = 0; i < 7; i++) {
-      weeklySchedule[i].start = prefs.getUInt(getKey(i, true).c_str(), 0);
-      weeklySchedule[i].end = prefs.getUInt(getKey(i, false).c_str(), 0);
-    }
-    prefs.end();
-  }
+	void load() {
+		prefs.begin("schedule", true);
+		for(int i = 0; i < 7; i++) {
+			uint32_t start = prefs.getUInt(getKey(i, true).c_str(), 0);
+			uint32_t end = prefs.getUInt(getKey(i, false).c_str(), 0);
+			// Валидация данных
+			weeklySchedule[i].start = (start <= 86400) ? start : 0;
+			weeklySchedule[i].end = (end <= 86400) ? end : 0;
+		}
+		prefs.end();
+	}
 
   void save() {
     prefs.begin("schedule", false);
@@ -37,33 +40,35 @@ public:
     load(); // Загрузить пустые значения
   }
 
-  bool checkSchedule(const DateTime& now) {
-    if(relay.isBlocked()) return false;
+	void forceScheduleCheck(const DateTime& now) {
+		bool newState = checkSchedule(now);
+		updateRelayState(newState);
+	}
 
-    uint8_t currentDay = now.dayOfTheWeek() % 7;
-    uint32_t currentTime = now.hour() * 3600 + now.minute() * 60 + now.second();
-    
-    if(weeklySchedule[currentDay].start > 86400 || 
-      weeklySchedule[currentDay].end > 86400 ||
-      weeklySchedule[currentDay].start == weeklySchedule[currentDay].end) {
-      relay.setState(false);
-    return false;
-    }
+	void updateRelayState(bool newState) {
+		if(newState != relay.getState() && !relay.isBlocked()) {
+			relay.setState(newState);
+		}
+	}
 
-    bool newState = false;
-    Schedule daySchedule = weeklySchedule[currentDay];
+	bool checkSchedule(const DateTime& now) {
+		if(relay.isBlocked()) return false;
+		
+		uint8_t currentDay = now.dayOfTheWeek() % 7;
+		uint32_t currentTime = now.hour() * 3600 + now.minute() * 60 + now.second();
+		Schedule daySchedule = weeklySchedule[currentDay];
+		
 
-    if(daySchedule.start < daySchedule.end) {
-      newState = (currentTime >= daySchedule.start && currentTime <= daySchedule.end);
-    } else {
-      newState = (currentTime >= daySchedule.start || currentTime <= daySchedule.end);
-    }
-    
-    if(newState != relay.getState()) {
-      relay.setState(newState);
-    }
-    return newState;
-  }
+		bool newState = false;
+		
+		if(daySchedule.start < daySchedule.end) {
+			newState = (currentTime >= daySchedule.start && currentTime <= daySchedule.end);
+		} else {
+			newState = (currentTime >= daySchedule.start || currentTime <= daySchedule.end);
+		}
+		
+		return newState; 
+	}
 
   DateTime getNextStartTime(const DateTime& now) {
 	  uint8_t currentDay = now.dayOfTheWeek() % 7;

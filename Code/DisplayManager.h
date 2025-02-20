@@ -70,8 +70,12 @@ public:
 	oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tempStr);
 	
 	// Строка 3: Состояние реле
-	String status = relay.getState() ? "АКТИВНО" : "ОЖИДАНИЕ";
-	if(relay.isBlocked()) status += " (БЛОКИРОВКА)";
+  String status;
+  if (relay.isBlocked()) {
+  	status = "БЛОКИРОВКА";
+  } else {
+  	status = relay.getState() ? "АКТИВНО" : "ОЖИДАНИЕ";
+  }
 	oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, status);
 	
 	// Строка 4: Статус Wi-Fi
@@ -87,136 +91,75 @@ public:
   }
 
 	void drawTemperatureCalibrationScreen(
-	  float currentTemp, 
-	  float calibratedTemp, 
-	  float calibrationOffset,
-	  TempEditField currentField
-	  ) {
-
-    oled.clear();
-	  
-	  // Заголовок
-	  oled.drawString(LEFT_PADDING, TOP_PADDING, "=Кал-ка температуры=");
-	  
-	  // Исходное значение
-	  char currentTempStr[40];
-	  snprintf(currentTempStr, sizeof(currentTempStr), "Ист значение: %.1f", currentTemp);
-	  if(currentField == EDIT_SOURCE) {
-		drawUnderlinedText(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, currentTempStr);
-	  } else {
+		float currentTemp, 
+		float calibratedTemp, 
+		float calibrationOffset,
+		TempEditField currentField
+	) {
+		oled.clear();
+		
+		// Заголовок
+		oled.drawString(LEFT_PADDING, TOP_PADDING, "=Кал-ка температуры=");
+		
+		// Исходное значение
+		char currentTempStr[40];
+		String currentPrefix = (currentField == EDIT_SOURCE) ? "> " : "  ";
+		snprintf(currentTempStr, sizeof(currentTempStr), "%sИст значение: %.1f", 
+				currentPrefix.c_str(), currentTemp);
 		oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, currentTempStr);
-	  }
-	  
-	  // Совмещенное значение
-	  char calibratedTempStr[40];
-	  snprintf(calibratedTempStr, sizeof(calibratedTempStr), "Совм значение: %.1f", calibratedTemp);
-	  oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, calibratedTempStr);
-	  
-	  // Смещение
-	  char offsetStr[40];
-	  snprintf(offsetStr, sizeof(offsetStr), "Знач смещения: %.1f", calibrationOffset);
-	  if(currentField == EDIT_OFFSET) {
-		drawUnderlinedText(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, offsetStr);
-	  } else {
+		
+		// Совмещенное значение
+		char calibratedTempStr[40];
+		snprintf(calibratedTempStr, sizeof(calibratedTempStr), "  Совм значение: %.1f", calibratedTemp);
+		oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, calibratedTempStr);
+		
+		// Смещение
+		char offsetStr[40];
+		String offsetPrefix = (currentField == EDIT_OFFSET) ? "> " : "  ";
+		snprintf(offsetStr, sizeof(offsetStr), "%sЗнач смещения: %.1f", 
+				offsetPrefix.c_str(), calibrationOffset);
 		oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, offsetStr);
-	  }
-	  
-	  // Обязательное обновление дисплея
-	  oled.display();
+		
+		oled.display();
 	}
   
 	void drawTimeSetupScreen(const DateTime& time, TimeEditField currentField) {
-	  oled.clear();
-	  
-	  // Заголовок
-	  oled.drawString(LEFT_PADDING, TOP_PADDING, "Время и дата");
-	  
-	  // Дата: формат "ДД.ММ.ГГГГ"
-	  char dateStr[20];
-	  snprintf(dateStr, sizeof(dateStr), "%02d.%02d.%04d", 
-			  time.day(), time.month(), time.year());
-	  String dateString = String(dateStr);
-	  
-	  // Время: формат "ЧЧ:ММ:СС"
-	  char timeStr[20];
-	  snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", 
-			  time.hour(), time.minute(), time.second());
-	  String timeString = String(timeStr);
-	  
-	  // Подсказка
-	  String hint = (currentField == TIME_EDIT_CONFIRM) ? "ЗАЖАТЬ - Сохранить" : "Настройка...";
-	  
-	  // Отрисовка даты с подчеркиванием выбранного поля
-	  int dateX = LEFT_PADDING;
-	  int dateY = TOP_PADDING + LINE_HEIGHT;
-	  
-	  // День
-	  if (currentField == TIME_EDIT_DAY) {
-		drawUnderlinedText(dateX, dateY, dateString.substring(0, 2));
-	  } else {
-		oled.drawString(dateX, dateY, dateString.substring(0, 2));
-	  }
-	  
-	  // Точка
-	  oled.drawString(dateX + 2 * 6, dateY, ".");
-	  
-	  // Месяц
-	  if (currentField == TIME_EDIT_MONTH) {
-		drawUnderlinedText(dateX + 3 * 6, dateY, dateString.substring(3, 5));
-	  } else {
-		oled.drawString(dateX + 3 * 6, dateY, dateString.substring(3, 5));
-	  }
-	  
-	  // Точка
-	  oled.drawString(dateX + 5 * 6, dateY, ".");
-	  
-	  // Год
-	  if (currentField == TIME_EDIT_YEAR) {
-		drawUnderlinedText(dateX + 6 * 6, dateY, dateString.substring(6, 10));
-	  } else {
-		oled.drawString(dateX + 6 * 6, dateY, dateString.substring(6, 10));
-	  }
-	  
-	  // Отрисовка времени с подчеркиванием выбранного поля
-	  int timeX = LEFT_PADDING;
-	  int timeY = TOP_PADDING + 2 * LINE_HEIGHT;
-	  
-	  // Часы
-	  if (currentField == TIME_EDIT_HOUR) {
-		drawUnderlinedText(timeX, timeY, timeString.substring(0, 2));
-	  } else {
-		oled.drawString(timeX, timeY, timeString.substring(0, 2));
-	  }
-	  
-	  // Двоеточие
-	  oled.drawString(timeX + 2 * 6, timeY, ":");
-	  
-	  // Минуты
-	  if (currentField == TIME_EDIT_MINUTE) {
-		drawUnderlinedText(timeX + 3 * 6, timeY, timeString.substring(3, 5));
-	  } else {
-		oled.drawString(timeX + 3 * 6, timeY, timeString.substring(3, 5));
-	  }
-	  
-	  // Двоеточие
-	  oled.drawString(timeX + 5 * 6, timeY, ":");
-	  
-	  // Секунды
-	  if (currentField == TIME_EDIT_SECOND) {
-		drawUnderlinedText(timeX + 6 * 6, timeY, timeString.substring(6, 8));
-	  } else {
-		oled.drawString(timeX + 6 * 6, timeY, timeString.substring(6, 8));
-	  }
-	  
-	  // Подсказка
-	  if (currentField == TIME_EDIT_CONFIRM) {
-		drawUnderlinedText(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, hint);
-	  } else {
-		oled.drawString(LEFT_PADDING, TOP_PADDING + 3 * LINE_HEIGHT, hint);
-	  }
-	  
-	  oled.display();
-  }
+		oled.clear();
+		
+		// Заголовок
+		oled.drawString(LEFT_PADDING, TOP_PADDING, "Время и дата");
+		
+		// Форматирование даты и времени
+		char dateStr[30];
+		snprintf(dateStr, sizeof(dateStr), "%s%02d.%s%02d.%s%04d",
+				(currentField == TIME_EDIT_DAY) ? ">" : " ",
+				time.day(),
+				(currentField == TIME_EDIT_MONTH) ? "> " : " ",
+				time.month(),
+				(currentField == TIME_EDIT_YEAR) ? "> " : " ",
+				time.year());
+		
+		char timeStr[30];
+		snprintf(timeStr, sizeof(timeStr), "%s%02d:%s%02d:%s%02d",
+				(currentField == TIME_EDIT_HOUR) ? ">" : " ",
+				time.hour(),
+				(currentField == TIME_EDIT_MINUTE) ? ">" : " ",
+				time.minute(),
+				(currentField == TIME_EDIT_SECOND) ? ">" : " ",
+				time.second());
+		
+		// Подсказка
+		String hint = (currentField == TIME_EDIT_CONFIRM) ? 
+		"> ЗАЖАТЬ - Сохранить" : 
+		"  Настройка...";
+		
+		// Отрисовка
+		oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, dateStr);
+		oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, timeStr);
+		oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, hint);
+		
+		oled.display();
+	}
 
 	void drawAPInfoScreen(const String& ssid, const String& pass, const String& ip) {
 		oled.clear();
@@ -226,74 +169,71 @@ public:
 		oled.display();
 	}
 
-  void drawTimezoneSetupScreen(int currentOffset, bool editing) {
-    oled.clear();
-    
-    // Заголовок
-    oled.drawString(LEFT_PADDING, TOP_PADDING, "== Часовой пояс ==");
-  
-    // Текущее смещение
-    char tzStr[30];
-    snprintf(tzStr, sizeof(tzStr), "Смещение: UTC%+d", currentOffset);
-    
-    if(editing) {
-      drawUnderlinedText(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tzStr);
-    } else {
-      oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tzStr);
-    }
-  
-    // Подсказка
-    String hint = editing ? "Вращайте энкодер" : "Нажмите для редакт.";
-    oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, hint);
-  
-    oled.display();
-  }
+	void drawTimezoneSetupScreen(int currentOffset, bool editing) {
+		oled.clear();
+		
+		// Заголовок
+		oled.drawString(LEFT_PADDING, TOP_PADDING, "== Часовой пояс ==");
+		
+		// Текущее смещение
+		char tzStr[30];
+		String prefix = editing ? "> " : "  ";
+		snprintf(tzStr, sizeof(tzStr), "%sСмещение: UTC%+d", 
+				prefix.c_str(), currentOffset);
+		oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tzStr);
+		
+		// Подсказка
+		String hint = editing ? "  Вращайте энкодер" : "> Нажмите для редакт.";
+		oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, hint);
+		
+		oled.display();
+	}
 
-  void drawScheduleSetupScreen(
-	  uint8_t day,
-	  uint32_t start,
-	  uint32_t stop,
-	  int acceleration,
-	  ScheduleEditField field ) {
-	  oled.clear();
-  
-	  // Заголовок
-	  oled.drawString(LEFT_PADDING, TOP_PADDING, "Настройка расписания");
-  
-	  // День недели
-	  String dayStr = "День: " + String(daysOfWeek[day]);
-	  if(field == SCHEDULE_EDIT_DAY) {
-	  	drawUnderlinedText(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, dayStr);
-	  } else {
-	  	oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, dayStr);
-	  }
-  
-	  // Время старта
-	  char startStr[30];
-	  TimeSpan tsStart(start);
-	  snprintf(startStr, sizeof(startStr), "%sСтарт: %02d:%02d", 
-	  		 field == SCHEDULE_EDIT_START ? "> " : "  ",
-	  		 tsStart.hours(), 
-	  		 tsStart.minutes());
-	  oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, startStr);
-  
-	  // Время стопа
-	  char stopStr[30];
-	  TimeSpan tsStop(stop);
-	  snprintf(stopStr, sizeof(stopStr), "%sСтоп: %02d:%02d", 
-	  		 field == SCHEDULE_EDIT_STOP ? "> " : "  ",
-	  		 tsStop.hours(), 
-	  		 tsStop.minutes());
-	  oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, stopStr);
-  
-	  // Ускорение
-	  char accelStr[30];
-	  snprintf(accelStr, sizeof(accelStr), "Ускорение: %d мин", 
-	  		 map(acceleration, 1, 6, 1, 30));
-	  oled.drawString(LEFT_PADDING, TOP_PADDING + 4*LINE_HEIGHT, accelStr);
-  
-	  oled.display();
-  }
+	void drawScheduleSetupScreen(
+		uint8_t day,
+		uint32_t start,
+		uint32_t stop,
+		int acceleration,
+		ScheduleEditField field) 
+	{
+		oled.clear();
+		
+		// Заголовок
+		oled.drawString(LEFT_PADDING, TOP_PADDING, "Настройка расписания");
+		
+		// День недели
+		String dayPrefix = (field == SCHEDULE_EDIT_DAY) ? "> " : "  ";
+		String dayStr = dayPrefix + "День: " + String(daysOfWeek[day]);
+		oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, dayStr);
+		
+		// Время старта
+		char startStr[30];
+		TimeSpan tsStart(start);
+		String startPrefix = (field == SCHEDULE_EDIT_START) ? "> " : "  ";
+		snprintf(startStr, sizeof(startStr), "%sСтарт: %02d:%02d", 
+				startPrefix.c_str(),
+				tsStart.hours(), 
+				tsStart.minutes());
+		oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, startStr);
+		
+		// Время стопа
+		char stopStr[30];
+		TimeSpan tsStop(stop);
+		String stopPrefix = (field == SCHEDULE_EDIT_STOP) ? "> " : "  ";
+		snprintf(stopStr, sizeof(stopStr), "%sСтоп: %02d:%02d", 
+				stopPrefix.c_str(),
+				tsStop.hours(), 
+				tsStop.minutes());
+		oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, stopStr);
+		
+		// Ускорение
+		char accelStr[30];
+		snprintf(accelStr, sizeof(accelStr), "  Ускорение: %d мин", 
+				map(acceleration, 1, 6, 1, 30));
+		oled.drawString(LEFT_PADDING, TOP_PADDING + 4*LINE_HEIGHT, accelStr);
+		
+		oled.display();
+	}
 
   void showResetAnimation(float progress) {
 	  oled.clear();
@@ -321,12 +261,6 @@ public:
     oled.drawString(0, 0, message);
     oled.display();
   }
-
-	void drawUnderlinedText(int x, int y, const String& text) {
-	  oled.drawString(x, y, text);
-	  int width = oled.getStringWidth(text);
-	  oled.drawLine(x, y + 10, x + width, y + 10);
-	}
 
 private:
   SSD1306Wire oled{0x3c, I2C_SDA, I2C_SCL};

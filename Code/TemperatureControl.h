@@ -80,6 +80,7 @@ private:
   bool overheatStatus = false;
 
   void checkProtection() {
+
     if(relay.isBlocked() && currentTemp <= TEMP_LOW_THRESHOLD) {
       relay.tryReset();
     }
