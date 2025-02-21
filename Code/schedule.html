@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройка расписания</title>
+    <link rel="stylesheet" href="styles.css"> <!-- Подключение CSS -->
+</head>
+<body>
+    <h1>Настройка расписания</h1>
+    <div id="schedule-form">
+        <div class="day-row header">
+            <div class="day-name">День недели</div>
+            <div>Включение</div>
+            <div>Выключение</div>
+        </div>
+        <!-- Динамически генерируемые строки для дней недели -->
+        <div class="day-row">
+            <div class="day-name">Понедельник</div>
+            <input type="time" name="d0s" step="300">
+            <input type="time" name="d0e" step="300">
+        </div>
+        <div class="day-row">
+            <div class="day-name">Вторник</div>
+            <input type="time" name="d1s" step="300">
+            <input type="time" name="d1e" step="300">
+        </div>
+        <div class="day-row">
+            <div class="day-name">Среда</div>
+            <input type="time" name="d2s" step="300">
+            <input type="time" name="d2e" step="300">
+        </div>
+        <div class="day-row">
+            <div class="day-name">Четверг</div>
+            <input type="time" name="d3s" step="300">
+            <input type="time" name="d3e" step="300">
+        </div>
+        <div class="day-row">
+            <div class="day-name">Пятница</div>
+            <input type="time" name="d4s" step="300">
+            <input type="time" name="d4e" step="300">
+        </div>
+        <div class="day-row">
+            <div class="day-name">Суббота</div>
+            <input type="time" name="d5s" step="300">
+            <input type="time" name="d5e" step="300">
+        </div>
+        <div class="day-row">
+            <div class="day-name">Воскресенье</div>
+            <input type="time" name="d6s" step="300">
+            <input type="time" name="d6e" step="300">
+        </div>
+    </div>
+    <button onclick="saveSchedule()">Сохранить расписание</button>
+    <div id="message"></div>
+    <script src="script.js"></script> <!-- Подключение JavaScript -->
+</body>
+</html>
