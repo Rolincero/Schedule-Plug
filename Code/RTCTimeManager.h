@@ -16,12 +16,18 @@ public:
 
 	void init() {
 		prefs.begin("time", true);
-		timezoneOffset = prefs.getInt("tz", 3); // Значение по умолчанию 3 часа
+		timezoneOffset = prefs.getInt("tz", 3);
 		prefs.end();
 		
 		if (!rtc.begin()) {
 			Serial.println("Couldn't find RTC");
-			while (1);
+			while(1); // Остановка при отсутствии RTC
+		}
+		
+		// Принудительное использование времени из DS3231
+		if(rtc.lostPower()) {
+			Serial.println("RTC lost power, setting default time");
+			rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
 		}
 	}
 
@@ -30,7 +36,8 @@ public:
 			timeClient.setTimeOffset(timezoneOffset * 3600);
 			if(timeClient.forceUpdate()) {
 				unsigned long epoch = timeClient.getEpochTime();
-				rtc.adjust(DateTime(epoch));
+				rtc.adjust(DateTime(epoch)); // Синхронизация только DS3231
+				needsSync = false;
 			}
 		}
 	}

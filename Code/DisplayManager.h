@@ -70,12 +70,12 @@ public:
 	oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, tempStr);
 	
 	// Строка 3: Состояние реле
-  String status;
-  if (relay.isBlocked()) {
-  	status = "БЛОКИРОВКА";
-  } else {
-  	status = relay.getState() ? "АКТИВНО" : "ОЖИДАНИЕ";
-  }
+	String status;
+	if (relay.isBlocked()) {
+		status = "БЛОКИРОВКА";
+	} else {
+		status = scheduler->isActiveNow(timeManager.getNow()) ? "АКТИВНО" : "ОЖИДАНИЕ"; // Добавить метод isActiveNow
+	}
 	oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, status);
 	
 	// Строка 4: Статус Wi-Fi

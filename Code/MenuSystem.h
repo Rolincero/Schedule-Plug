@@ -318,7 +318,7 @@ private:
 	  }
   }
 
-  void handleScheduleValueChange(int delta) {
+	void handleScheduleValueChange(int delta) {
 		unsigned long now = millis();
 		if (now - lastEncoderMove > 300) acceleration = 0;
 		acceleration = constrain(acceleration + abs(delta), 1, 6);
@@ -341,7 +341,9 @@ private:
 				stopTime = constrain(stopTime + step, 0, 86399);
 				break;
 		}
-    saveDaySchedule();
+		
+		DateTime currentTime = rtc.getNow();
+		schedule.forceScheduleCheck(currentTime);
 	}
 
   void loadDaySchedule() {

@@ -45,44 +45,49 @@ public:
 		updateRelayState(newState);
 	}
 
-	void updateRelayState(bool newState) {
+	void updateRelayState(bool newState) const {
 		if(newState != relay.getState() && !relay.isBlocked()) {
 			relay.setState(newState);
 		}
 	}
 
-	bool checkSchedule(const DateTime& now) {
+	bool checkSchedule(const DateTime& now) const {
 		if(relay.isBlocked()) return false;
 		
-		uint8_t currentDay = now.dayOfTheWeek() % 7;
+		// Корректировка дня недели согласно DS3231 (0=воскресенье -> 0=понедельник)
+		uint8_t currentDay = (now.dayOfTheWeek() + 6) % 7; // Преобразование к 0=ПН, 6=ВС
 		uint32_t currentTime = now.hour() * 3600 + now.minute() * 60 + now.second();
 		Schedule daySchedule = weeklySchedule[currentDay];
 		
-
 		bool newState = false;
 		
-		if(daySchedule.start < daySchedule.end) {
-			newState = (currentTime >= daySchedule.start && currentTime <= daySchedule.end);
-		} else {
-			newState = (currentTime >= daySchedule.start || currentTime <= daySchedule.end);
+		if(daySchedule.start == daySchedule.end) {
+			newState = false; // Расписание отключено
+		}
+		else if(daySchedule.start < daySchedule.end) {
+			newState = (currentTime >= daySchedule.start && currentTime < daySchedule.end);
+		} 
+		else {
+			newState = (currentTime >= daySchedule.start || currentTime < daySchedule.end);
 		}
 		
-		return newState; 
+		updateRelayState(newState);
+		return newState;
 	}
 
-  DateTime getNextStartTime(const DateTime& now) {
-	  uint8_t currentDay = now.dayOfTheWeek() % 7;
-	  uint32_t currentTime = now.hour() * 3600 + now.minute() * 60 + now.second();
-	  
-	  for(int i = 0; i < 7; i++) {
-		uint8_t day = (currentDay + i) % 7;
+	DateTime getNextStartTime(const DateTime& now) {
+		uint8_t currentDay = (now.dayOfTheWeek() + 6) % 7; // Корректировка дня
+		uint32_t currentTime = now.hour() * 3600 + now.minute() * 60 + now.second();
 		
-		if(weeklySchedule[day].start > currentTime || i > 0) {
-		  uint32_t targetTime = weeklySchedule[day].start;
-		  return now + TimeSpan((i * 86400) + (targetTime - currentTime));
+		for(int i = 0; i < 7; i++) {
+			uint8_t day = (currentDay + i) % 7;
+			uint32_t targetTime = weeklySchedule[day].start;
+			
+			if((i == 0 && targetTime > currentTime) || i > 0) {
+				return now + TimeSpan((i * 86400) + (targetTime - currentTime));
+			}
 		}
-	  }
-	  return now; // Fallback
+		return now + TimeSpan(86400); // Fallback: следующее расписание через 24ч
 	}
 
 	DateTime getNextShutdownTime(const DateTime& now) {
@@ -98,6 +103,10 @@ public:
 		}
 	  }
 	  return now; // Fallback
+	}
+
+	bool isActiveNow(const DateTime& now) const {
+		return checkSchedule(now);
 	}
 
   Schedule weeklySchedule[7];
