@@ -23,6 +23,8 @@ public:
   void init() {
     loadCredentials();
     beginConnection();
+    server.on("/", [this]() { handleRoot(); });
+    server.on("/reconfigure", [this]() { handleReconfigure(); });
   }
   
   void handleClient() {
@@ -211,8 +213,30 @@ private:
   
   void handleRoot() {
     server.send(200, "text/html", 
-      "<h1>Smart Plug</h1>"
-      "<a href='/config'>Settings</a>");
+          "<!DOCTYPE html><html><head><meta charset='UTF-8'>"
+          "<title>Умная розетка</title><style>" 
+          "body {font-family: Arial; text-align: center;}"
+          ".menu {margin: 50px auto; width: 300px;}"
+          "a {display: block; margin: 20px; padding: 15px;"
+          "background: #f0f0f0; border-radius: 5px; text-decoration: none; color: #333;}"
+          "</style></head><body>"
+          "<h1>Умная розетка</h1>"
+          "<div class='menu'>"
+          "<a href='/schedule'>Настройка расписания</a>"
+          "<a href='/reconfigure'>Переподключение к сети</a>"
+          "</div></body></html>");
+  }
+  
+  void handleReconfigure() {
+    server.send(200, "text/html",
+          "<form action='/save' method='POST'>"
+          "<h2>Настройка WiFi</h2>"
+          "<label>SSID:</label><br>"
+          "<input type='text' name='ssid' required><br><br>"
+          "<label>Пароль:</label><br>"
+          "<input type='password' name='pass'><br><br>"
+          "<input type='submit' value='Сохранить'>"
+          "</form>");
   }
   
   void handleConfig() {
