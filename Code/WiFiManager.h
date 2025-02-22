@@ -96,6 +96,60 @@ public:
 	  return hours * 3600 + minutes * 60;
   }
   
+  void handleScheduleGet() {
+	String json = "{";
+		for(int i = 0; i < 7; i++) {
+			json += "\"d" + String(i) + "s\":\"" + formatTime(scheduleManager.weeklySchedule[i].start) + "\",";
+			json += "\"d" + String(i) + "e\":\"" + formatTime(scheduleManager.weeklySchedule[i].end) + "\"";
+			if(i < 6) json += ",";
+		}
+		json += "}";
+		server.send(200, "application/json", json);
+  }
+
+  String formatTime(uint32_t seconds) {
+	  uint8_t hours = seconds / 3600;
+	  uint8_t minutes = (seconds % 3600) / 60;
+	  return (hours < 10 ? "0" : "") + String(hours) + ":" + 
+	  (minutes < 10 ? "0" : "") + String(minutes);
+  }
+
+  void handleSchedulePost() {
+	  bool success = true;
+	    for(int i = 0; i < 7; i++) {
+	  	  String startStr = server.arg("d" + String(i) + "s");
+	  	  String endStr = server.arg("d" + String(i) + "e");
+		
+	  	  uint32_t start = parseTime(startStr);
+	  	  uint32_t end = parseTime(endStr);
+		
+	  	  if(start > 86340 || end > 86340) { // Максимум 23:59
+	  	  	success = false;
+	  	  	break;
+	  	  }
+		
+		    scheduleManager.weeklySchedule[i].start = start;
+		    scheduleManager.weeklySchedule[i].end = end;
+	    }
+	
+	    if(success) {
+	  	  scheduleManager.save();
+	  	  server.send(200, "text/plain", "OK");
+	    } else {
+	  	  server.send(400, "text/plain", "Ошибка формата времени");
+	    }
+  }
+
+  uint32_t parseTime(String timeStr) {
+	  int colonIndex = timeStr.indexOf(':');
+	  if(colonIndex == -1) return 0;
+	
+	  uint8_t hours = timeStr.substring(0, colonIndex).toInt();
+	  uint8_t minutes = timeStr.substring(colonIndex+1).toInt();
+	
+	  return hours * 3600 + minutes * 60;
+  }
+  
   WiFiState getState() const {
     if(WiFi.status() == WL_CONNECTED) return WiFiState::CONNECTED;
     if(WiFi.getMode() & WIFI_AP) return WiFiState::AP_MODE;
