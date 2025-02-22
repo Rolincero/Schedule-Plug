@@ -269,6 +269,33 @@ public:
 		oled.display(); // Явное обновление дисплея
 	}
 
+	void updateTM1637(const DateTime& now, float temp) {
+		static bool showTemp = false;
+		static unsigned long lastSwitch = 0;
+		
+		// Обновляем данные каждые 2 секунды
+		if(millis() - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
+			lastDisplayUpdate = millis();
+			
+			if(relay.getState()) { // Если реле активно
+				// Переключаемся между температурой и временем выключения
+				if(millis() - lastSwitch > 2000) {
+					showTemp = !showTemp;
+					lastSwitch = millis();
+				}
+				
+				if(showTemp) {
+					displayTemperature(temp);
+				} else {
+					displayShutdownTime(now);
+				}
+			} else { // Если реле неактивно
+				// Постоянно показываем время следующего запуска
+				displayNextScheduleTime(now);
+			}
+		}
+	}
+
   void showResetAnimation(float progress) {
 	  oled.clear();
 	
@@ -312,26 +339,6 @@ private:
   static constexpr unsigned long DISPLAY_UPDATE_INTERVAL = 2000;
   static const char* daysOfWeek[7];
 
-  void updateTM1637(const DateTime& now, float temp) {
-	static bool showTemp = true;
-	static unsigned long lastSwitch = 0;
-	
-	if(millis() - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
-	  lastDisplayUpdate = millis();
-	  
-	  if(relay.getState()) {
-		if(millis() - lastSwitch > 2000) {
-		  showTemp = !showTemp;
-		  lastSwitch = millis();
-		}
-		showTemp ? displayTemperature(temp) : displayShutdownTime(now);
-	  } else {
-		displayNextScheduleTime(now);
-	  }
-	}
-  }
-
-
   void displayTime(const DateTime& now) {
     tmDisplay.showNumberDecEx(now.hour() * 100 + now.minute(), 0b01000000, true);
   }
@@ -347,14 +354,14 @@ private:
     tmDisplay.setSegments(data);
   }
 
-	void displayShutdownTime(const DateTime& now) {
-	  DateTime nextOff = scheduler->getNextShutdownTime(now);
-	  tmDisplay.showNumberDecEx(nextOff.hour() * 100 + nextOff.minute(), 0b01000000, true);
-	}
+  	void displayShutdownTime(const DateTime& now) {
+    	DateTime nextOff = scheduler->getNextShutdownTime(now);
+    	tmDisplay.showNumberDecEx(nextOff.hour() * 100 + nextOff.minute(), 0b01000000, true);
+}
 
 	void displayNextScheduleTime(const DateTime& now) {
-	  DateTime nextOn = scheduler->getNextStartTime(now);
-	  tmDisplay.showNumberDecEx(nextOn.hour() * 100 + nextOn.minute(), 0b01000000, true);
+		DateTime nextOn = scheduler->getNextStartTime(now);
+		tmDisplay.showNumberDecEx(nextOn.hour() * 100 + nextOn.minute(), 0b01000000, true);
 	}
 
 };

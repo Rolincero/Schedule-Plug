@@ -38,6 +38,6 @@ void loop() {
   scheduler.checkSchedule(now);
   wifi.handleClient();
   menu.update();
-  
+  display.updateTM1637(now, tempControl.getTemperature());
   delay(100);
 }
