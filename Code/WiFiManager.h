@@ -38,6 +38,8 @@ public:
     prefs.remove("pass");
     prefs.end();
     WiFi.disconnect();
+    state = WiFiState::DISCONNECTED; // Добавить эту строку
+    startAPMode(); // Добавить переход в режим AP
   }
   
   void handleScheduleGet() {
@@ -95,11 +97,18 @@ public:
   }
   
   WiFiState getState() const {
-    return state;
+    if(WiFi.status() == WL_CONNECTED) return WiFiState::CONNECTED;
+    if(WiFi.getMode() & WIFI_AP) return WiFiState::AP_MODE;
+    return WiFiState::DISCONNECTED;
   }
   
   String getIP() const {
-    return WiFi.localIP().toString();
+    if(state == WiFiState::CONNECTED) {
+      return WiFi.localIP().toString();
+    } else if(state == WiFiState::AP_MODE) {
+      return WiFi.softAPIP().toString();
+    }
+    return "-";
   }
 
   String getAPSSID() const {
@@ -112,6 +121,13 @@ public:
 
   String getAPIP() const {
     return WiFi.softAPIP().toString();
+  }
+
+  String getConnectedSSID() const {
+    if(state == WiFiState::CONNECTED) {
+      return WiFi.SSID().length() > 0 ? WiFi.SSID() : "-";
+    }
+    return "-";
   }
   
   void loadCredentials() {

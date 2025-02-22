@@ -16,7 +16,7 @@ public:
     MAIN_MENU,
     TIME_SETUP,
     SCHEDULE_SETUP,
-    WIFI_RESET,
+    WIFI_INFO,
     AP_INFO,
     TEMP_CALIBRATION,
     TIMEZONE_SETUP,
@@ -66,7 +66,7 @@ private:
   const char* mainMenuItems[6] = {
     "Настройка времени",
     "Установка расписания",
-    "Сброс-инфо Wi-Fi",
+    "Информация о WiFi",
     "Калиб-ка температуры",
     "Часовой пояс",
     "Выход"
@@ -191,18 +191,23 @@ private:
 				case TIME_EDIT_CONFIRM:
 				  // Ничего не делаем, ждем LONG_PRESS для сохранения
 				  break;
-        }
+        		}
 
 			}
-			break;
+		break;
 
-      case AP_INFO:
-			  if (action == EncoderHandler::SHORT_PRESS) {
-			  	currentState = MAIN_MENU; // Возврат в меню
-			  }
-		  break;
+		case WIFI_INFO:
+			if(action == EncoderHandler::SHORT_PRESS) {
+				currentState = MAIN_MENU;
+			}
+			if(action == EncoderHandler::LONG_PRESS && currentState == WIFI_INFO) {
+				wifi.resetCredentials();
+				display.showDialog("WiFi сброшен!", 2000);
+				currentState = MAIN_SCREEN;
+			}
+		break;
 
-      case TIMEZONE_SETUP:
+      	case TIMEZONE_SETUP:
 				if(action == EncoderHandler::SHORT_PRESS) {
 					editingTimezone = !editingTimezone;
 					if(!editingTimezone) {
@@ -213,15 +218,15 @@ private:
 				if(editingTimezone && delta != 0) {
 					timezoneOffset = constrain(timezoneOffset + delta, -12, 14);
 				}
-			break;
+		break;
 
-      case SCHEDULE_SETUP:
+      	case SCHEDULE_SETUP:
 				handleScheduleSetup(delta, action);
 				if (action == EncoderHandler::LONG_PRESS) {
 					saveDaySchedule();
 					currentState = MAIN_SCREEN;
 				}
-			break;
+		break;
 
       // Обработка других состояний...
     }
@@ -234,21 +239,21 @@ private:
 
   void updateDisplay() {
     switch(currentState) {
-		  case MAIN_SCREEN: {
+		case MAIN_SCREEN: {
 			DateTime now = rtc.getNow();
 			display.drawMainScreen(now, temp.getTemperature(), 
 								  temp.isOverheated(), wifi.getState());
-			break;
-		  }
-		  case MAIN_MENU:
+		break;
+		}
+		case MAIN_MENU:
 			display.drawMenu(mainMenuItems + visibleStartIndex, visibleItemsCount, menuIndex - visibleStartIndex);
-			break;
+		break;
 			
-		  case TIME_SETUP:
+		case TIME_SETUP:
 			display.drawTimeSetupScreen(editingTime, currentEditField);
-			break;
+		break;
 
-      case TEMP_CALIBRATION:
+      	case TEMP_CALIBRATION:
 			  display.drawTemperatureCalibrationScreen(
 				  calibrationSource,       // Локальная переменная
 				  calibrationSource + currentOffset,
@@ -257,12 +262,16 @@ private:
 			  );
 	    break;
       
-			case AP_INFO:
-				display.drawAPInfoScreen(wifi.getAPSSID(), wifi.getAPPassword(), wifi.getAPIP());
-			break;
+		case WIFI_INFO:
+		display.drawWiFiInfoScreen(
+			wifi.getConnectedSSID(),
+			wifi.getIP(),
+			wifi.getState()
+		);
+		break;
 
-      case TIMEZONE_SETUP:
-	      display.drawTimezoneSetupScreen(timezoneOffset, editingTimezone);
+      	case TIMEZONE_SETUP:
+	      	display.drawTimezoneSetupScreen(timezoneOffset, editingTimezone);
 	    break;
 
       case SCHEDULE_SETUP:
@@ -291,13 +300,18 @@ private:
     switch(menuIndex) {
       case 0: currentState = TIME_SETUP; break;
       case 1: currentState = SCHEDULE_SETUP; break;
-			case 2: 
-				if (wifi.getState() == WiFiManager::WiFiState::AP_MODE) {
-					currentState = AP_INFO;
-				} else {
-					resetWiFi();
-				}
-			break;
+	  case 2: 
+	  switch(wifi.getState()) {
+		  case WiFiManager::WiFiState::CONNECTED:
+			  currentState = WIFI_INFO;
+			  break;
+		  case WiFiManager::WiFiState::AP_MODE:
+			  currentState = AP_INFO;
+			  break;
+		  default:
+			  currentState = WIFI_INFO; // Всегда показываем информацию
+	  }
+	  break;
       case 3: // Калибровка температуры
 	      currentState = TEMP_CALIBRATION;
 	      currentOffset = temp.getCalibrationOffset();

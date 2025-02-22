@@ -55,7 +55,7 @@ public:
 	
 	// Строка 1: Время и день недели
 	char datetime[30];
-  int tzOffset = this->timeManager.getTimezoneOffset();
+  	int tzOffset = this->timeManager.getTimezoneOffset();
 	snprintf(datetime, sizeof(datetime), "%02d:%02d:%02d %s (UTC%+d)", 
 			now.hour(), now.minute(), now.second(),
 			daysOfWeek[(now.dayOfTheWeek() + 6) % 7],
@@ -81,7 +81,7 @@ public:
 	// Строка 4: Статус Wi-Fi
 	String wifiStatus;
 	switch(wifiState) {
-	  case WiFiManager::WiFiState::CONNECTED: wifiStatus = "Подключен"; break;
+	  case WiFiManager::WiFiState::CONNECTED: wifiStatus = WiFi.SSID(); break;
 	  case WiFiManager::WiFiState::AP_MODE: wifiStatus = "Точка доступа"; break;
 	  default: wifiStatus = "Отключен";
 	}
@@ -234,6 +234,40 @@ public:
 		
 		oled.display();
 	}
+
+	void drawWiFiInfoScreen(const String& ssid, const String& ip, WiFiManager::WiFiState state) {
+		oled.clear();
+		
+		// Заголовок
+		oled.drawString(LEFT_PADDING, TOP_PADDING, "== WiFi информация ==");
+		
+		// Строка 1: SSID сети
+		String ssidLine = "SSID: " + (ssid.length() > 0 ? ssid : "-");
+		oled.drawString(LEFT_PADDING, TOP_PADDING + LINE_HEIGHT, ssidLine);
+		
+		// Строка 2: IP-адрес
+		String ipLine = "IP: " + (ip.length() > 0 ? ip : "-");
+		oled.drawString(LEFT_PADDING, TOP_PADDING + 2*LINE_HEIGHT, ipLine);
+		
+		// Строка 3: Статус
+		String status;
+		switch(state) {
+			case WiFiManager::WiFiState::CONNECTED: 
+				status = "Подключено";
+				break;
+			case WiFiManager::WiFiState::AP_MODE: 
+				status = "Режим точки";
+				break;
+			case WiFiManager::WiFiState::DISCONNECTED:
+				status = "Отключено";
+				break;
+			default: 
+				status = "Неизвестно";
+		}
+		oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, "Статус: " + status);
+		
+		oled.display();
+	}	
 
   void showResetAnimation(float progress) {
 	  oled.clear();
