@@ -373,7 +373,9 @@ private:
 		schedule.forceScheduleCheck(currentTime);
 	}
 
-  void loadDaySchedule() {
+	void loadDaySchedule() {
+		// Добавляем проверку индекса дня
+		currentDay = constrain(currentDay, 0, 6);
 		startTime = schedule.weeklySchedule[currentDay].start;
 		stopTime = schedule.weeklySchedule[currentDay].end;
 	}

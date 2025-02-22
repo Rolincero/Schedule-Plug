@@ -272,27 +272,22 @@ public:
 	void updateTM1637(const DateTime& now, float temp) {
 		static bool showTemp = false;
 		static unsigned long lastSwitch = 0;
-		
-		// Обновляем данные каждые 2 секунды
-		if(millis() - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
-			lastDisplayUpdate = millis();
-			
-			if(relay.getState()) { // Если реле активно
-				// Переключаемся между температурой и временем выключения
-				if(millis() - lastSwitch > 2000) {
-					showTemp = !showTemp;
-					lastSwitch = millis();
-				}
+	
+		if(relay.getState()) {
+			if(millis() - lastSwitch > 2000) {
+				showTemp = !showTemp;
+				lastSwitch = millis();
 				
+				// Принудительно обновляем данные
+				DateTime refreshTime = timeManager.getNow();
 				if(showTemp) {
 					displayTemperature(temp);
 				} else {
-					displayShutdownTime(now);
+					displayShutdownTime(refreshTime);
 				}
-			} else { // Если реле неактивно
-				// Постоянно показываем время следующего запуска
-				displayNextScheduleTime(now);
 			}
+		} else {
+			displayNextScheduleTime(now);
 		}
 	}
 
@@ -355,9 +350,18 @@ private:
   }
 
   	void displayShutdownTime(const DateTime& now) {
-    	DateTime nextOff = scheduler->getNextShutdownTime(now);
-    	tmDisplay.showNumberDecEx(nextOff.hour() * 100 + nextOff.minute(), 0b01000000, true);
-}
+		DateTime nextOff = scheduler->getNextShutdownTime(now);
+		// Добавляем проверку на валидность времени
+		if(nextOff.year() == 1970) { // RTC default year
+			tmDisplay.showNumberDecEx(0, 0b01000000, true);
+		} else {
+			tmDisplay.showNumberDecEx(
+				nextOff.hour() * 100 + nextOff.minute(), 
+				0b01000000, 
+				true
+			);
+		}
+	}
 
 	void displayNextScheduleTime(const DateTime& now) {
 		DateTime nextOn = scheduler->getNextStartTime(now);

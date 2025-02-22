@@ -91,18 +91,24 @@ public:
 	}
 
 	DateTime getNextShutdownTime(const DateTime& now) {
-	  uint8_t currentDay = now.dayOfTheWeek() % 7;
-	  uint32_t currentTime = now.hour() * 3600 + now.minute() * 60 + now.second();
-	  
-	  for(int i = 0; i < 7; i++) {
-		uint8_t day = (currentDay + i) % 7;
-		
-		if(weeklySchedule[day].end > currentTime || i > 0) {
-		  uint32_t targetTime = weeklySchedule[day].end;
-		  return now + TimeSpan((i * 86400) + (targetTime - currentTime));
+		uint8_t currentDay = (now.dayOfTheWeek() + 6) % 7; // Исправлено приведение дня недели
+		uint32_t currentTime = now.hour() * 3600 + now.minute() * 60 + now.second();
+	
+		for(int i = 0; i < 7; i++) {
+			uint8_t day = (currentDay + i) % 7;
+			uint32_t endTime = weeklySchedule[day].end;
+	
+			// Если время окончания сегодня и еще не наступило
+			if(i == 0 && endTime > currentTime) {
+				return DateTime(now.year(), now.month(), now.day()) + TimeSpan(endTime);
+			}
+			// Если сегодняшнее время окончания прошло, ищем следующий день
+			else if(i > 0 && weeklySchedule[day].end != weeklySchedule[day].start) {
+				DateTime nextDay = now + TimeSpan(i, 0, 0, 0);
+				return DateTime(nextDay.year(), nextDay.month(), nextDay.day()) + TimeSpan(weeklySchedule[day].end);
+			}
 		}
-	  }
-	  return now; // Fallback
+		return now; // Fallback
 	}
 
 	bool isActiveNow(const DateTime& now) const {
