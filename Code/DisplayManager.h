@@ -163,9 +163,11 @@ public:
 
 	void drawAPInfoScreen(const String& ssid, const String& pass, const String& ip) {
 		oled.clear();
-		oled.drawString(0, 0, "SSID: " + ssid);
-		oled.drawString(0, 12, "Pass: " + pass);
-		oled.drawString(0, 24, "IP: " + ip);
+		oled.drawString(0, 0, "Режим Точки Доступа");
+		oled.drawString(0, 12, "SSID: " + ssid);
+		oled.drawString(0, 24, "Pass: " + pass);
+		oled.drawString(0, 36, "IP: " + ip);
+		oled.drawString(0, 48, "Кнопка - возврат");
 		oled.display();
 	}
 
@@ -226,7 +228,7 @@ public:
 				tsStop.minutes());
 		oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, stopStr);
 		
-		// Ускорение
+		// Ускорениеы
 		char accelStr[30];
 		snprintf(accelStr, sizeof(accelStr), "  Ускорение: %d мин", 
 				map(acceleration, 1, 6, 1, 30));
@@ -259,15 +261,13 @@ public:
 				status = "Режим точки";
 				break;
 			case WiFiManager::WiFiState::DISCONNECTED:
-				status = "Отключено";
-				break;
 			default: 
-				status = "Неизвестно";
+				status = "Отключено";
 		}
 		oled.drawString(LEFT_PADDING, TOP_PADDING + 3*LINE_HEIGHT, "Статус: " + status);
 		
-		oled.display();
-	}	
+		oled.display(); // Явное обновление дисплея
+	}
 
   void showResetAnimation(float progress) {
 	  oled.clear();

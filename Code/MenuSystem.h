@@ -35,7 +35,9 @@ MenuSystem(DisplayManager& display, EncoderHandler& encoder,
   }
 
 private:
-
+  WiFiManager::WiFiState wifiStateCache;
+  String ssidCache;
+  String ipCache;
   float currentOffset = 0.0;
   float calibrationSource = 0.0;
   TempEditField currentTempField = EDIT_OFFSET;
@@ -197,14 +199,22 @@ private:
 		break;
 
 		case WIFI_INFO:
-			if(action == EncoderHandler::SHORT_PRESS) {
-				currentState = MAIN_MENU;
-			}
-			if(action == EncoderHandler::LONG_PRESS && currentState == WIFI_INFO) {
-				wifi.resetCredentials();
-				display.showDialog("WiFi сброшен!", 2000);
-				currentState = MAIN_SCREEN;
-			}
+		if(action == EncoderHandler::SHORT_PRESS) {
+			currentState = MAIN_MENU;
+			updateDisplay(); // Обновляем экран меню
+		}
+		if(action == EncoderHandler::LONG_PRESS) {
+			wifi.resetCredentials();
+			display.showDialog("WiFi сброшен!", 2000);
+			currentState = MAIN_SCREEN;
+			updateDisplay(); // Принудительное обновление главного экрана
+		}
+		break;
+
+		case AP_INFO:
+		if(action == EncoderHandler::SHORT_PRESS) {
+			currentState = MAIN_MENU;
+		}
 		break;
 
       	case TIMEZONE_SETUP:
@@ -263,10 +273,22 @@ private:
 	    break;
       
 		case WIFI_INFO:
-		display.drawWiFiInfoScreen(
-			wifi.getConnectedSSID(),
-			wifi.getIP(),
-			wifi.getState()
+			if(wifi.getState() == WiFiManager::WiFiState::AP_MODE) {
+				currentState = AP_INFO; // Автоматический переход в AP_INFO
+			} else {
+				wifiStateCache = wifi.getState();
+				ssidCache = wifi.getConnectedSSID();
+				ipCache = wifi.getIP();
+				display.drawWiFiInfoScreen(ssidCache, ipCache, wifiStateCache);
+			}
+			break;
+		break;
+
+		case AP_INFO: 
+		display.drawAPInfoScreen(
+			wifi.getAPSSID(),
+								 wifi.getAPPassword(),
+								 wifi.getAPIP()
 		);
 		break;
 
@@ -300,17 +322,8 @@ private:
     switch(menuIndex) {
       case 0: currentState = TIME_SETUP; break;
       case 1: currentState = SCHEDULE_SETUP; break;
-	  case 2: 
-	  switch(wifi.getState()) {
-		  case WiFiManager::WiFiState::CONNECTED:
-			  currentState = WIFI_INFO;
-			  break;
-		  case WiFiManager::WiFiState::AP_MODE:
-			  currentState = AP_INFO;
-			  break;
-		  default:
-			  currentState = WIFI_INFO; // Всегда показываем информацию
-	  }
+	  case 2: // Пункт "Информация о WiFi"
+	  currentState = (wifi.getState() == WiFiManager::WiFiState::AP_MODE) ? AP_INFO : WIFI_INFO;
 	  break;
       case 3: // Калибровка температуры
 	      currentState = TEMP_CALIBRATION;
