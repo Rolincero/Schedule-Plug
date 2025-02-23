@@ -90,6 +90,21 @@ public:
 	oled.display();
   }
 
+  	void showPressProgress(float progress) {
+		// Очищаем только нижнюю часть экрана для прогресс-бара
+		int barHeight = 8;
+		int y = oled.getHeight() - barHeight;
+		oled.setColor(BLACK);
+		oled.fillRect(0, y, oled.getWidth(), barHeight);
+		oled.setColor(WHITE);
+		
+		// Рисуем рамку и заполнение
+		oled.drawRect(0, y, oled.getWidth(), barHeight);
+		int width = progress * oled.getWidth();
+		oled.fillRect(0, y, width, barHeight);
+		oled.display();
+	}
+
 	void drawTemperatureCalibrationScreen(
 		float currentTemp, 
 		float calibratedTemp, 
@@ -163,11 +178,11 @@ public:
 
 	void drawAPInfoScreen(const String& ssid, const String& pass, const String& ip) {
 		oled.clear();
-		oled.drawString(0, 0, "Режим Точки Доступа");
-		oled.drawString(0, 12, "SSID: " + ssid);
-		oled.drawString(0, 24, "Pass: " + pass);
-		oled.drawString(0, 36, "IP: " + ip);
-		oled.drawString(0, 48, "Кнопка - возврат");
+		oled.drawString(0, 0, "SSID: " + ssid);
+		oled.drawString(0, 12, "Pass: " + pass);
+		oled.drawString(0, 24, "IP: " + ip);
+		oled.drawString(0, 36, "Нажать - возврат");
+		oled.drawString(0, 48, "Зажать - сбросить");
 		oled.display();
 	}
 

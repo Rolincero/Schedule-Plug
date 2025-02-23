@@ -268,12 +268,12 @@ private:
 		break;
 
       	case TEMP_CALIBRATION:
-			  display.drawTemperatureCalibrationScreen(
-				  calibrationSource,       // Локальная переменная
-				  calibrationSource + currentOffset,
-				  currentOffset,
-				  currentTempField
-			  );
+			display.drawTemperatureCalibrationScreen(
+				calibrationSource,       // Локальная переменная
+				calibrationSource + currentOffset,
+				currentOffset,
+				currentTempField
+			);
 	    break;
       
 		case WIFI_INFO:
@@ -291,8 +291,8 @@ private:
 		case AP_INFO: 
 		display.drawAPInfoScreen(
 			wifi.getAPSSID(),
-								 wifi.getAPPassword(),
-								 wifi.getAPIP()
+			wifi.getAPPassword(),
+			wifi.getAPIP()
 		);
 		break;
 
@@ -300,21 +300,28 @@ private:
 	      	display.drawTimezoneSetupScreen(timezoneOffset, editingTimezone);
 	    break;
 
-      case SCHEDULE_SETUP:
-				display.drawScheduleSetupScreen(
-					currentDay,
-					startTime,
-					stopTime,
-					acceleration,
-					currentScheduleField
-				);
-			break;
+      	case SCHEDULE_SETUP:
+			display.drawScheduleSetupScreen(
+				currentDay,
+				startTime,
+				stopTime,
+				acceleration,
+				currentScheduleField
+			);
+		break;
 			
 		  case RESET_ANIMATION:
 			drawResetAnimation();
 			break;
-      // Отрисовка других состояний...
     }
+
+	if (encoder.isButtonPressed()) {
+		unsigned long duration = encoder.getPressDuration();
+		if (duration > 50) { // debounce
+			float progress = (float)duration / 2000.0; // для LONG_PRESS (2 секунды)
+			display.showPressProgress(progress);
+		}
+	}
   }
 
   void drawResetAnimation() {

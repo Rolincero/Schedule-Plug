@@ -20,6 +20,17 @@ public:
     lastEncoderPos = encoder.getCount();
   }
 
+  bool isButtonPressed() const {
+	  return buttonPressed;
+  }
+
+  unsigned long getPressDuration() const {
+	  if (buttonPressed) {
+		  return millis() - buttonPressStart;
+	  }
+	  return 0;
+  }
+
   void update() {
     handleRotation();
     handleButton();
