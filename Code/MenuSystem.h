@@ -218,24 +218,28 @@ private:
 		break;
 
       	case TIMEZONE_SETUP:
-				if(action == EncoderHandler::SHORT_PRESS) {
-					editingTimezone = !editingTimezone;
-					if(!editingTimezone) {
-						rtc.setTimezoneOffset(timezoneOffset);
-					}
+		  if(action == EncoderHandler::LONG_PRESS) { // Добавить этот блок
+			currentState = MAIN_SCREEN;
+			break;
+		}
+			if(action == EncoderHandler::SHORT_PRESS) {
+				editingTimezone = !editingTimezone;
+				if(!editingTimezone) {
+					rtc.setTimezoneOffset(timezoneOffset);
 				}
-				
-				if(editingTimezone && delta != 0) {
-					timezoneOffset = constrain(timezoneOffset + delta, -12, 14);
-				}
+			}
+			
+			if(editingTimezone && delta != 0) {
+				timezoneOffset = constrain(timezoneOffset + delta, -12, 14);
+			}
 		break;
 
       	case SCHEDULE_SETUP:
-				handleScheduleSetup(delta, action);
-				if (action == EncoderHandler::LONG_PRESS) {
-					saveDaySchedule();
-					currentState = MAIN_SCREEN;
-				}
+			handleScheduleSetup(delta, action);
+			if (action == EncoderHandler::LONG_PRESS) {
+				saveDaySchedule();
+				currentState = MAIN_SCREEN;
+			}
 		break;
 
       // Обработка других состояний...

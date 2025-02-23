@@ -68,7 +68,7 @@ private:
       if (duration > 50) { // Debounce
         if (duration < 500) {
           currentAction = SHORT_PRESS;
-        } else if (duration >= 2000 && duration < 20000) {
+        } else if (duration >= 1000 && duration < 20000) {
           currentAction = LONG_PRESS;
         } else if (duration >= 20000) {
           currentAction = VERY_LONG_PRESS;
