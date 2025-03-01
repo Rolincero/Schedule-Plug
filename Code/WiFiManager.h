@@ -5,6 +5,9 @@
 #include <Preferences.h>
 #include "RTCTimeManager.h"
 #include "ScheduleManager.h"
+#include "WebUI.h"
+#include "RelayController.h"
+#include "TemperatureControl.h"
 
 class WiFiManager {
 public:
@@ -15,15 +18,15 @@ public:
     AP_MODE
   };
   
-  WiFiManager(RTCTimeManager& tm, ScheduleManager& sm) 
-  : server(80), timeManager(tm), scheduleManager(sm) {
+  WiFiManager(RTCTimeManager& tm, ScheduleManager& sm, RelayController& relay, TemperatureControl& tempControl)
+    : server(80), timeManager(tm), scheduleManager(sm), relay(relay), tempControl(tempControl) {
     apSSID = "SmartPlug_" + String(ESP.getEfuseMac(), HEX);
   }
   
   void init() {
     loadCredentials();
     beginConnection();
-    server.on("/", [this]() { handleRoot(); });
+    server.on("/", [this]() { handleWebInterface(); });
     server.on("/reconfigure", [this]() { handleReconfigure(); });
   }
   
@@ -138,11 +141,40 @@ public:
     storedPass = prefs.getString("pass", "");
     prefs.end();
   }
+
+  void handleWebInterface() {
+    server.send(200, "text/html", WEB_UI);
+  }
+  
+  void handleStatusAPI() {
+    String json = "{";
+    json += "\"temp\":" + String(tempControl.getTemperature()) + ",";
+    json += "\"relay\":" + String(relay.getState() ? "true" : "false");
+    json += "}";
+    server.send(200, "application/json", json);
+  }
+  
+  void handleTempHistoryAPI() {
+    //замени на реальные данные
+    String json = "{";
+    json += "\"labels\":[\"12:00\", \"12:05\", \"12:10\", \"12:15\"],";
+    json += "\"values\":[25, 26, 27, 28]";
+    json += "}";
+    server.send(200, "application/json", json);
+  }
+  
+  void initWebServer() {
+    server.on("/", [this]() { handleWebInterface(); });
+    server.on("/api/status", [this]() { handleStatusAPI(); });
+    server.on("/api/temp-history", [this]() { handleTempHistoryAPI(); });
+  }
   
 private:
   WebServer server;
   RTCTimeManager& timeManager;
   ScheduleManager& scheduleManager;
+  RelayController& relay;  // Добавь эту строку
+  TemperatureControl& tempControl;  // Добавь эту строку
   Preferences prefs;
   WiFiState state = WiFiState::DISCONNECTED;
   unsigned long lastCheck = 0;
@@ -212,52 +244,19 @@ private:
   }
   
   void handleRoot() {
-    server.send(200, "text/html", 
-          "<!DOCTYPE html><html><head><meta charset='UTF-8'>"
-          "<title>Умная розетка</title><style>" 
-          "body {font-family: Arial; text-align: center;}"
-          ".menu {margin: 50px auto; width: 300px;}"
-          "a {display: block; margin: 20px; padding: 15px;"
-          "background: #f0f0f0; border-radius: 5px; text-decoration: none; color: #333;}"
-          "</style></head><body>"
-          "<h1>Умная розетка</h1>"
-          "<div class='menu'>"
-          "<a href='/schedule'>Настройка расписания</a>"
-          "<a href='/reconfigure'>Переподключение к сети</a>"
-          "</div></body></html>");
+    handleWebInterface();
   }
   
   void handleReconfigure() {
-    server.send(200, "text/html",
-          "<form action='/save' method='POST'>"
-          "<h2>Настройка WiFi</h2>"
-          "<label>SSID:</label><br>"
-          "<input type='text' name='ssid' required><br><br>"
-          "<label>Пароль:</label><br>"
-          "<input type='password' name='pass'><br><br>"
-          "<input type='submit' value='Сохранить'>"
-          "</form>");
+    handleWebInterface();
   }
   
   void handleConfig() {
-    server.send(200, "text/html",
-      "<form action='/save'>"
-      "SSID: <input name='ssid'><br>"
-      "Password: <input name='pass'><br>"
-      "<input type='submit'></form>");
+    handleWebInterface();
   }
   
   void handleAPRoot() {
-    server.send(200, "text/html", 
-      "<h1>WiFi Setup</h1>"
-      "<p>Connect to AP:</p>"
-      "<p><b>SSID:</b> " + apSSID + "</p>"
-      "<p><b>Password:</b> " + apPass + "</p>"
-      "<form action='/save'>"
-      "Your WiFi SSID: <input name='ssid'><br>"
-      "Password: <input name='pass'><br>"
-      "<input type='submit' value='Save'>"
-      "</form>");
+    handleWebInterface();
   }
   
   void handleAPSave() {

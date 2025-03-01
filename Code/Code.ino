@@ -13,7 +13,7 @@ RelayController relay;
 ScheduleManager scheduler(relay);
 DisplayManager display(relay, scheduler, timeManager);
 TemperatureControl tempControl(relay);
-WiFiManager wifi(timeManager, scheduler);
+WiFiManager wifi(timeManager, scheduler, relay, tempControl);
 EncoderHandler encoder;
 MenuSystem menu(display, encoder, timeManager, scheduler, wifi, tempControl);
 
@@ -29,6 +29,9 @@ void setup() {
 	encoder.init();
 	digitalWrite(GPIO_CONTROL, LOW);
 	scheduler.load();
+
+  // Инициализация веб-сервера
+  wifi.initWebServer();
 }
 
 void loop() {
